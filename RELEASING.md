@@ -105,7 +105,11 @@ sed -i 's/"version": "0\.1\.0"/"version": "0.1.0-rc.1"/' packages/npm/package.js
 rm -rf packages/pypi/dist
 python -m build packages/pypi --outdir packages/pypi/dist
 python -m twine check packages/pypi/dist/*
-python -m twine upload --repository testpypi packages/pypi/dist/*
+# `pypitest` is the alias configured in ~/.pypirc on the maintainer's machine.
+# twine resolves --repository against that file, not against a well-known name,
+# so this must match the section header there or the upload fails on an unknown
+# repository rather than on anything to do with the artifact.
+python -m twine upload --repository pypitest packages/pypi/dist/*
 
 # Wait for TestPyPI simple-index propagation.
 sleep 60
@@ -240,6 +244,31 @@ Trigger any `release: published` CI hooks (none in v0.1.0, but wires the pattern
 echo "v*-release-notes.md" >> .git/info/exclude   # one-time, repo-local ignore
 gh release create vX.Y.Z --target main --title "vX.Y.Z" --notes-file vX.Y.Z-release-notes.md
 ```
+
+## Benchmarks and Experiments Run After the Release, Never Before
+
+A run whose numbers will be published must score with a **released** engine, named by its version.
+Do not start a benchmark or an experiment against an unreleased working tree, however green it is.
+
+The reason is on the record in this repository. The v0.3.0-cycle scorecards were produced by the
+0.2.0 scoring package while the filenames named the 0.3.0 release cycle, so no external reader could
+tell from any public identifier what the numbers were measured with. It took a full audit of Git
+blob hashes to establish it afterwards. "Scored with agent-style 0.4.0" is checkable by anyone;
+"scored with commit `a96753d`" is not, and a commit on `main` can be rewritten or become ambiguous
+in a way a published version cannot.
+
+So the order is fixed:
+
+1. Tag and publish the release to both registries.
+2. Freeze any floating model alias to a pinned identifier, and archive the task set and both control
+   texts with SHA-256 hashes.
+3. Timestamp the preregistration publicly, if the run is preregistered.
+4. Only then generate.
+
+If a run afterwards exposes a detector defect, fix it and ship a patch release. That is cheaper than
+discovering mid-analysis that the scoring basis cannot be named. See
+`docs/preregistration-generation-decay.md` section 1, which encodes this as a hard precondition for
+the generation-decay study.
 
 ## Post-Release Cleanup
 
