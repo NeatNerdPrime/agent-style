@@ -387,3 +387,22 @@ def test_rule_d_uses_markdown_block_boundaries(
     assert _audit_text_at(tmp_path, body, "RULE-D") == expected, (
         f"RULE-D block segmentation wrong for: {label}"
     )
+
+
+def test_list_tools_handles_skill_entries() -> None:
+    """`list_tools()` must not assume every tool has a top-level target_path.
+
+    A skill installs into surfaces under `target_groups` and the registry
+    schema forbids it a top-level `target_path`. Indexing that key raised
+    KeyError for every caller from v0.2.0, when `style-review` was added, and
+    no local test exercised it: the failure only surfaced when a release
+    rehearsal imported the built package and called the public API.
+    """
+    import agent_style
+
+    tools = agent_style.list_tools()
+    assert tools, "list_tools() returned nothing"
+    names = {name for name, _mode, _path in tools}
+    assert "style-review" in names, f"skill entry missing from {sorted(names)}"
+    for name, mode, _path in tools:
+        assert mode, f"tool {name} has no install_mode"

@@ -24,11 +24,18 @@ def path() -> str:
 
 
 def list_tools() -> list:
-    """Return a list of (tool_name, install_mode, target_path) tuples."""
+    """Return a list of (tool_name, install_mode, target_path) tuples.
+
+    ``target_path`` is None for a skill-type tool. A skill installs into one or
+    more surfaces listed under ``target_groups``, and the registry schema
+    forbids it a top-level ``target_path``, so there is no single path to
+    report. Indexing the key directly raised KeyError for every caller from
+    v0.2.0, when the first skill was added, until this was fixed.
+    """
     from agent_style.registry import Registry
     r = Registry()
     return [
-        (name, spec["install_mode"], spec["target_path"])
+        (name, spec["install_mode"], spec.get("target_path"))
         for name, spec in r.tools.items()
     ]
 
