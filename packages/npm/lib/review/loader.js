@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 'use strict';
 /**
- * RULES.md loader with the PLAN-documented 5-level resolution order.
+ * RULES.md loader with a 5-level resolution order.
  *
  * 1. Project-local: .agent-style/RULES.md in cwd or any parent.
  * 2. Package bundle: node_modules/agent-style/data/RULES.md (or ../data/RULES.md

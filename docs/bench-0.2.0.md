@@ -1,6 +1,6 @@
 # agent-style bench — v0.2.0 (multi-model matrix)
 
-- Task set: 10 fixed prose tasks (see `scripts/bench/tasks.md`)
+- Task set: 10 fixed prose tasks: 5 PR descriptions, 3 design-doc sections, and 2 commit messages
 - Generations per condition: 2
 - Models compared: 2
 - Date: 2026-04-21

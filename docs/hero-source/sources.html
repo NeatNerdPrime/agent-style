@@ -3,12 +3,11 @@
 <!--
   agent-style canonical-sources collage.
   Stylized tribute tiles for the four writing authorities cited by RULE-01..12.
-  Render at 2x DPI:
-    "C:/Program Files/Google/Chrome/Application/chrome.exe" \
-      --headless --disable-gpu --hide-scrollbars \
-      --force-device-scale-factor=2 --window-size=1280,440 \
-      --screenshot="C:/.../docs/sources.png" \
-      "file:///C:/.../docs/hero-source/sources.html"
+  Render at 3x DPI via Playwright:
+    python scripts/render-bench-png.py \
+      --src docs/hero-source/sources.html \
+      --selector .sources \
+      --out docs/sources.png
 -->
 <html lang="en">
 <head>
@@ -209,7 +208,7 @@
   </div>
 
   <div class="footer">
-    Each citation verified against the original work. Per-rule page references live in <code>RULES.md</code>.
+    Each citation verified against the original work. Per-rule source references live in <code>RULES.md</code>.
   </div>
 
 </div>

@@ -35,12 +35,13 @@ Supported tools and install modes in v0.4.0:
 | codex | print-only (writes `.agent-style/codex-system-prompt.md`; stdout = prompt) |
 | aider | multi-file-required (writes `.agent-style/aider-conventions.md`; stderr = `.aider.conf.yml` snippet) |
 | kiro | owned-file (writes `.kiro/steering/agent-style.md`) |
+| style-review | skill-with-references (installs the skill and its references on supported hosts) |
 
-The full rule set lives in the canonical repository at https://github.com/yzhao062/agent-style. This PyPI package bundles `RULES.md`, `NOTICE.md`, the 9 primary adapters, and the `tools.json` registry; running `agent-style rules` prints the bundled `RULES.md` for quick review.
+The full rule set lives in the canonical repository at https://github.com/yzhao062/agent-style. This PyPI package bundles `RULES.md`, `NOTICE.md`, the 9 primary adapters, the `style-review` skill and its references, and the `tools.json` registry; running `agent-style rules` prints the bundled `RULES.md` for quick review.
 
 ## License
 
-- Code: MIT (`LICENSES/MIT.txt`).
-- Bundled prose (`RULES.md`, `NOTICE.md`, adapters): CC BY 4.0 (`LICENSES/CC-BY-4.0.txt`).
+- Code: MIT (`agent_style/data/LICENSES/MIT.txt`).
+- Bundled prose (`RULES.md`, `NOTICE.md`, adapters, `style-review`): CC BY 4.0 (`agent_style/data/LICENSES/CC-BY-4.0.txt`).
 
 Roadmap (v0.4.0+): `agent-style update` (pull refreshed adapters), `agent-style override <RULE> disable` (per-rule opt-out), `agent-style clean` (single-command uninstall), `.agent-style/config.toml` (project-level config).

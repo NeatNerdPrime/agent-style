@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Mechanical detectors: regex / word-list rules. Deterministic by construction.
 
-Rules covered (per PLAN Rev 3 detector matrix):
+Rules covered (see ``skills/style-review/references/rule-detectors.md``):
   RULE-B  em/en-dash casual use (excludes numeric ranges and paired names)
   RULE-D  overused sentence-initial transition openers from the six-item rule list
   RULE-G  heading title-case per RULE-G's own convention (lowercase articles,

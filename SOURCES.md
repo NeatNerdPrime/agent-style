@@ -2,7 +2,7 @@
 
 # Sources
 
-Two buckets: writing authorities for prose content; agent-instruction evidence for rule format and phrasing.
+Three buckets: writing authorities for prose content; agent-instruction evidence for rule format and phrasing; maintainer field observation for recurring AI-output patterns.
 
 ## Bucket A — Writing authorities
 

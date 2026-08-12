@@ -5,8 +5,8 @@ RULE-07 (positive form + antithesis) moved from a structural-only rule to a
 combined ``{"structural", "semantic"}`` rule. The ``not <adj>`` structural part
 stays deferred (``status="skipped"``), while the clause-level "X, not Y" /
 "not just X, but Y" antithesis is judged by the semantic host model. RULE-07
-therefore now joins the semantic host-pass list (RULE-01, 03, 04, 07, 08, 11,
-F, H).
+therefore now joins the semantic host-pass list (RULE-01, 02, 03, 04, 05, 06,
+07, 08, 11, F, H).
 
 These tests lock that new reality in two places that must stay in sync:
 

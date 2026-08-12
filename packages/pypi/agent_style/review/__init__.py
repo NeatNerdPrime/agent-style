@@ -4,10 +4,10 @@
 This module implements the deterministic half of the style-review workflow:
 mechanical and structural detection against agent-style's own rules.
 
-Semantic detection (RULE-01, RULE-03, RULE-04, RULE-08, RULE-11, RULE-F, RULE-H)
-requires an LLM judge and is only available from a skill host (Claude Code,
-Anthropic Skills) that provides the model. The plain CLI surfaces these as
-`status: "skipped"` rather than attempting them.
+Semantic detection (RULE-01, RULE-02, RULE-03, RULE-04, RULE-05, RULE-06,
+RULE-07, RULE-08, RULE-11, RULE-F, RULE-H) requires an LLM judge and is handled
+by a skill host (Claude Code, Anthropic Skills) that provides the model. The
+plain CLI surfaces these as `status: "skipped"` rather than attempting them.
 
 Public entry points:
 

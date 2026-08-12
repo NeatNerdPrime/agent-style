@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <!-- SPDX-License-Identifier: MIT -->
 <!--
-  agent-style bench scorecard panel (2-model).
+  agent-style bench scorecard panel (3-model).
 
-  Renders the cross-model headline numbers from docs/bench-0.3.0.md in the
+  Renders the corrected cross-model headline numbers from
+  docs/bench-0.3.0-rescored.md in the
   editorial style of hero.html and sources.html: cream paper, double-rule
   frame, Georgia + Segoe UI + mono typography, green accent for the
   improvement arc. Three stacked per-model panels (Claude Opus, OpenAI
@@ -12,13 +13,8 @@
   excluded from this figure because CLI -p programmatic mode does not
   load instruction files (see CHANGELOG).
 
-  Render at 3x DPI (window taller than 2-panel v0.2.0 figure to fit
-  three panels without clipping):
-    "C:/Program Files/Google/Chrome/Application/chrome.exe" \
-      --headless --disable-gpu --hide-scrollbars \
-      --force-device-scale-factor=3 --window-size=1280,1400 \
-      --screenshot="C:/Users/yuezh/PycharmProjects/agent-style/docs/bench.png" \
-      "file:///C:/Users/yuezh/PycharmProjects/agent-style/docs/hero-source/bench.html"
+  Render at 3x DPI via Playwright:
+    python scripts/render-bench-png.py
 -->
 <html lang="en">
 <head>
@@ -303,7 +299,7 @@
 <body>
 <div class="bench">
 
-  <div class="top-label">sanity benchmark · agent-style v0.3.0 · 10 fixed prose tasks · 3 models</div>
+  <div class="top-label">sanity benchmark · v0.3.0 preserved drafts · corrected v0.4.0 scoring · 10 fixed prose tasks · 3 models</div>
 
   <div class="question">
     <span class="q">Does <code>agent-style</code> actually reduce AI-tell density?</span><br>
@@ -321,10 +317,10 @@
         <span class="pod">via Claude Code CLI · <code style="font-family:'SF Mono',Consolas,monospace;font-size:10px;background:#fff;border:1px solid var(--rule);padding:0 3px;border-radius:2px">claude -p</code></span>
       </div>
       <div class="panel-nums">
-        <span class="baseline-val">105</span>
+        <span class="baseline-val">91</span>
         <span class="arrow">&rarr;</span>
-        <span class="treatment-val">58</span>
-        <span class="delta">&minus;47 (&minus;45%)</span>
+        <span class="treatment-val">48</span>
+        <span class="delta">&minus;43 (&minus;47%)</span>
       </div>
     </div>
     <div class="rules">
@@ -345,10 +341,10 @@
           <span class="label">em / en-dash casual use</span>
         </div>
         <div class="bar-cluster">
-          <div class="bar baseline"><span class="bar-fill" style="width: 43.5%;"></span><span class="count">27</span></div>
+          <div class="bar baseline"><span class="bar-fill" style="width: 41.9%;"></span><span class="count">26</span></div>
           <div class="bar treatment"><span class="bar-fill" style="width: 0%;"></span><span class="count">0</span></div>
         </div>
-        <div class="delta-col">&minus;27</div>
+        <div class="delta-col">&minus;26</div>
       </div>
       <div class="rule-row">
         <div class="rule-id-col">
@@ -356,10 +352,10 @@
           <span class="label">contractions, formal prose</span>
         </div>
         <div class="bar-cluster">
-          <div class="bar baseline"><span class="bar-fill" style="width: 22.6%;"></span><span class="count">14</span></div>
-          <div class="bar treatment"><span class="bar-fill" style="width: 16.1%;"></span><span class="count">10</span></div>
+          <div class="bar baseline"><span class="bar-fill" style="width: 1.6%;"></span><span class="count">1</span></div>
+          <div class="bar treatment"><span class="bar-fill" style="width: 0%;"></span><span class="count">0</span></div>
         </div>
-        <div class="delta-col">&minus;4</div>
+        <div class="delta-col">&minus;1</div>
       </div>
       <div class="rule-row">
         <div class="rule-id-col">
@@ -375,13 +371,13 @@
     </div>
     <div class="highlight-line">
       <span class="name">paper-04-related-work</span>
-      <span class="nums">20&rarr;8</span>
+      <span class="nums">12&rarr;7</span>
       &nbsp;&middot;&nbsp;
       <span class="name">grant-01-nsf-aim</span>
-      <span class="nums">18&rarr;8</span>
+      <span class="nums">16&rarr;5</span>
       &nbsp;&middot;&nbsp;
       <span class="name">design-02-rate-limiter</span>
-      <span class="nums">14&rarr;7</span>
+      <span class="nums">12&rarr;6</span>
     </div>
   </div>
 
@@ -393,10 +389,10 @@
         <span class="pod">via Codex CLI · <code style="font-family:'SF Mono',Consolas,monospace;font-size:10px;background:#fff;border:1px solid var(--rule);padding:0 3px;border-radius:2px">codex exec</code></span>
       </div>
       <div class="panel-nums">
-        <span class="baseline-val">51</span>
+        <span class="baseline-val">49</span>
         <span class="arrow">&rarr;</span>
-        <span class="treatment-val">28</span>
-        <span class="delta">&minus;23 (&minus;45%)</span>
+        <span class="treatment-val">26</span>
+        <span class="delta">&minus;23 (&minus;47%)</span>
       </div>
     </div>
     <div class="rules">
@@ -428,8 +424,8 @@
           <span class="label">contractions, formal prose</span>
         </div>
         <div class="bar-cluster">
-          <div class="bar baseline"><span class="bar-fill" style="width: 4.3%;"></span><span class="count">2</span></div>
-          <div class="bar treatment"><span class="bar-fill" style="width: 4.3%;"></span><span class="count">2</span></div>
+          <div class="bar baseline"><span class="bar-fill" style="width: 0%;"></span><span class="count">0</span></div>
+          <div class="bar treatment"><span class="bar-fill" style="width: 0%;"></span><span class="count">0</span></div>
         </div>
         <div class="delta-col zero">0</div>
       </div>
@@ -465,10 +461,10 @@
         <span class="pod">via Gemini CLI · <code style="font-family:'SF Mono',Consolas,monospace;font-size:10px;background:#fff;border:1px solid var(--rule);padding:0 3px;border-radius:2px">gemini --model flash</code></span>
       </div>
       <div class="panel-nums">
-        <span class="baseline-val">79</span>
+        <span class="baseline-val">73</span>
         <span class="arrow">&rarr;</span>
-        <span class="treatment-val">14</span>
-        <span class="delta">&minus;65 (&minus;82%)</span>
+        <span class="treatment-val">12</span>
+        <span class="delta">&minus;61 (&minus;84%)</span>
       </div>
     </div>
     <div class="rules">
@@ -511,21 +507,21 @@
           <span class="label">contractions, formal prose</span>
         </div>
         <div class="bar-cluster">
-          <div class="bar baseline"><span class="bar-fill" style="width: 17.5%;"></span><span class="count">7</span></div>
-          <div class="bar treatment"><span class="bar-fill" style="width: 2.5%;"></span><span class="count">1</span></div>
+          <div class="bar baseline"><span class="bar-fill" style="width: 2.5%;"></span><span class="count">1</span></div>
+          <div class="bar treatment"><span class="bar-fill" style="width: 0%;"></span><span class="count">0</span></div>
         </div>
-        <div class="delta-col">&minus;6</div>
+        <div class="delta-col">&minus;1</div>
       </div>
     </div>
     <div class="highlight-line">
       <span class="name">paper-03-experiments</span>
-      <span class="nums">13&rarr;0</span>
+      <span class="nums">12&rarr;0</span>
       &nbsp;&middot;&nbsp;
       <span class="name">grant-01-nsf-aim</span>
-      <span class="nums">19&rarr;7</span>
+      <span class="nums">19&rarr;6</span>
       &nbsp;&middot;&nbsp;
       <span class="name">paper-02-methods</span>
-      <span class="nums">13&rarr;2</span>
+      <span class="nums">11&rarr;2</span>
     </div>
   </div>
 
@@ -537,7 +533,7 @@
   <div class="footer">
     sanity benchmark
     <span class="sep">&middot;</span>
-    10 tasks &middot; 2 generations each &middot; 4 runners tested; Copilot CLI excluded from figure (see CHANGELOG)
+    10 tasks &middot; 2 generations each &middot; corrected pooled score: 272&rarr;146 (&minus;46%) &middot; 4 runners tested; Copilot CLI control excluded from panels
     <span class="sep">&middot;</span>
     <span class="caveat">directional, not statistically significant</span>
     <span class="sep">&middot;</span>

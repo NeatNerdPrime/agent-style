@@ -23,13 +23,65 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      # Required: without a tag there is nothing to check the package version
+      # against, and the checkout would fall back to whatever the selected
+      # branch points at, which is how a manual dispatch could publish an
+      # arbitrary tree past the gate.
+      tag:
+        description: "Existing release tag to build and publish"
+        required: true
+        type: string
       npm_only:
         description: "Skip PyPI; publish npm only (use when PyPI is already at this version)"
         type: boolean
         default: false
 
 jobs:
+  # Fail closed before either registry is touched. Without this, a forgotten
+  # version bump surfaces as a confusing npm duplicate-version error after the
+  # PyPI job has already reported success, because skip-existing swallows the
+  # duplicate on that side. Nothing anywhere says the tag disagreed with the
+  # packages, so the one mistake with no mechanical signal is diagnosed by
+  # hand, from the wrong job, after a partial run.
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Build from the tagged commit, not from whatever the default branch
+          # points at when the release is published.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - name: Assert the five version-carrying files agree, and match the tag
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          pyproject="$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/pypi/pyproject.toml | head -1)"
+          initpy="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' packages/pypi/agent_style/__init__.py | head -1)"
+          pkgjson="$(node -p "require('./packages/npm/package.json').version")"
+          pytools="$(node -p "require('./packages/pypi/agent_style/data/tools.json').agent_style_version")"
+          npmtools="$(node -p "require('./packages/npm/data/tools.json').agent_style_version")"
+          echo "pyproject=$pyproject init=$initpy package.json=$pkgjson pypi-tools=$pytools npm-tools=$npmtools"
+          for v in "$initpy" "$pkgjson" "$pytools" "$npmtools"; do
+            if [ "$v" != "$pyproject" ]; then
+              echo "::error::version files disagree; refusing to publish" >&2
+              exit 1
+            fi
+          done
+          if [ -z "${TAG_NAME:-}" ]; then
+            echo "::error::no release tag supplied; refusing to publish" >&2
+            exit 1
+          fi
+          if [ "$TAG_NAME" != "v$pyproject" ]; then
+            echo "::error::tag $TAG_NAME does not match package version $pyproject" >&2
+            exit 1
+          fi
+          echo "tag $TAG_NAME matches all five version files"
+
   pypi:
+    needs: gate
     if: github.event_name == 'release' || inputs.npm_only != true
     runs-on: ubuntu-latest
     permissions:
@@ -37,6 +89,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -51,12 +105,15 @@ jobs:
           skip-existing: true
 
   npm:
+    needs: gate
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: actions/setup-node@v5
         with:
           node-version: "24"

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""RULES.md loader with the PLAN-documented 5-level resolution order.
+"""RULES.md loader with a 5-level resolution order.
 
 Resolution order (first match wins; last step is a hard failure):
 

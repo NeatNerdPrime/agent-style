@@ -46,12 +46,15 @@ Supported tools and install modes in v0.4.0:
 | codex | print-only |
 | aider | multi-file-required |
 | kiro | owned-file |
+| style-review | skill-with-references |
+
+This npm package bundles `RULES.md`, `NOTICE.md`, the 9 primary adapters, the `style-review` skill and its references, and the `tools.json` registry.
 
 Canonical repository: https://github.com/yzhao062/agent-style
 
 ## License
 
-- Code: MIT (`LICENSES/MIT.txt`).
-- Bundled prose (`RULES.md`, `NOTICE.md`, adapters): CC BY 4.0 (`LICENSES/CC-BY-4.0.txt`).
+- Code: MIT (`data/LICENSES/MIT.txt`).
+- Bundled prose (`RULES.md`, `NOTICE.md`, adapters, `style-review`): CC BY 4.0 (`data/LICENSES/CC-BY-4.0.txt`).
 
 Roadmap (v0.4.0+): `agent-style update`, `agent-style override`, `agent-style clean`, and project-level config.

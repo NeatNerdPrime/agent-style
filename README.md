@@ -93,7 +93,7 @@ See [`RULES.md`](RULES.md) for the full per-rule blocks with BAD/GOOD examples, 
 
 ## Does It Work?
 
-![agent-style v0.3.0 sanity bench across Claude Opus 4.7, OpenAI GPT-5.4 via Codex CLI, and Gemini 3 Flash: 105 to 58 (-45%), 51 to 28 (-45%), and 79 to 14 (-82%) AI-tell violations across 10 fixed prose tasks, per-rule breakdown, directional-not-statsig caveat](docs/bench.png)
+![agent-style v0.3.0 sanity bench with corrected v0.4.0 scoring across Claude Opus 4.7, OpenAI GPT-5.4 via Codex CLI, and Gemini 3 Flash: 91 to 48 (-47%), 49 to 26 (-47%), and 73 to 12 (-84%) AI-tell violations across 10 fixed prose tasks, per-rule breakdown, directional-not-statsig caveat](docs/bench.png)
 
 Sanity bench on 10 fixed prose tasks, 2 generations per condition. The task set is 2 PR descriptions, 1 design-doc section, 1 commit message, 4 paper sections, 1 product description, and 1 NSF-style specific aim. Flagship models drafted each one twice: once with `agent-style` loaded at generation time, once without.
 
@@ -111,7 +111,7 @@ Numbers are directional and carry no claim of statistical significance. Each run
 
 Figures above come from [`docs/bench-0.3.0-rescored.md`](docs/bench-0.3.0-rescored.md). It re-scores the same 160 preserved drafts with the repaired detectors, reporting the original and corrected value side by side. Six divergences between a rule's directive and its detector were repaired, which moved the pooled delta from -133 to -126. That correction is small next to the scope limits above.
 
-Original scorecards remain at [`docs/bench-0.3.0.md`](docs/bench-0.3.0.md) and the preserved drafts at [`docs/bench-0.3.0-drafts/`](docs/bench-0.3.0-drafts/). Reproduction steps live in [`RELEASING.md`](RELEASING.md) under "Bench (Local Only)". The figure shows the original v0.3.0 scoring; the corrected re-score is linked above, and no new model generation was run for this release.
+Original scorecards remain at [`docs/bench-0.3.0.md`](docs/bench-0.3.0.md) and the preserved drafts at [`docs/bench-0.3.0-drafts/`](docs/bench-0.3.0-drafts/). Reproduction steps live in [`RELEASING.md`](RELEASING.md) under "Bench (Local Only)". The figure now shows the corrected scoring, regenerated for this release. No new model generation was run: the same preserved drafts were re-scored.
 
 ## Who It Is For
 
@@ -235,7 +235,7 @@ For `print-only` and `multi-file-required`, the JSON output carries `manual_step
 | Kiro (AWS IDE) | `owned-file` | `.kiro/steering/agent-style.md` |
 | **style-review** (skill) | `skill-with-references` | `.claude/skills/style-review/SKILL.md` + `.agent-style/skills/style-review/references/` |
 
-Amazon Q Developer, JetBrains AI Assistant, Windsurf, Ollama, Replit, OpenCode, Continue.dev, Tabnine, OpenAI Agents SDK skills, and Copilot path-scoped variants beyond the above are planned for v1.1; see the "Planned adapters" section of [`adapter-matrix.md`](adapter-matrix.md).
+The 11 planned v1.1 surfaces are Amazon Q Developer, JetBrains AI Assistant, Windsurf (repository), Windsurf (global), Ollama, Replit (project), Replit Skills, OpenCode, Continue.dev, Tabnine, and an OpenAI Agents SDK skill; see the "Planned adapters" section of [`adapter-matrix.md`](adapter-matrix.md).
 
 </details>
 
@@ -293,8 +293,8 @@ See the [Does It Work?](#does-it-work) section above for measured mechanical-vio
 <br>
 
 1. Shells out to `agent-style review --audit-only DESIGN.md` for the deterministic audit (same JSON as the CLI path).
-2. Adds semantic judgment via the host model for the 7 rules that need context-aware reasoning: RULE-01 curse of knowledge, RULE-03 vague language, RULE-04 needless words, RULE-08 uncalibrated claims, RULE-11 stress position, RULE-F term drift, RULE-H citation discipline.
-3. Merges deterministic + semantic scorecard; reports per-rule counts and first 5 violations each.
+2. Adds semantic judgment via the host model for 11 rule components: RULE-01, 02, 03, 04, 05, 06, 07, 08, 11, F and H.
+3. Merges deterministic + semantic scorecard; reports per-rule counts and first 3 violations each.
 4. Asks the user: *"produce a polished draft at DESIGN.reviewed.md?"*
 5. On yes, composes a revision prompt using `references/revision-prompt.md` with hard invariants:
    - **No new facts, metrics, citations, links, or code behavior** not in the source.
@@ -347,7 +347,7 @@ For `style-review` specifically, ask:
 
 Expected reply:
 
-> style-review active: 21-row scorecard, 18 rules checked (deterministic: RULE-B, D, G, I, 12, 05, 06, A, C, E; semantic via host: RULE-01, 03, 04, 07, 08, 11, F, H; skipped: RULE-02, 09, 10); workflow at skills/style-review/SKILL.md.
+> style-review active: 21-row scorecard, 19 rules checked (deterministic: RULE-B, D, G, I, 12, 05, 06, A, C, E; semantic via host: RULE-01, 02, 03, 04, 05, 06, 07, 08, 11, F, H; skipped: RULE-09, 10); workflow at skills/style-review/SKILL.md.
 
 If the version string or rule count is missing, the file is on disk but not in your agent's active context. Check that your tool's instruction-file reload behavior picked up the new content (some tools require a session restart).
 
