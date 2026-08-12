@@ -46,12 +46,28 @@ function excerpt(lineText, span, width = 120) {
   return out;
 }
 
-function* iterLines(text) {
-  const parts = text.split('\n');
+const LINE_BREAK_RE = /\r\n|[\n\r]/g;
+
+// (start, end) offset of each line under the same CR/LF/CRLF model the line
+// splitter uses. Advancing by `line.length + 1` instead is one character short
+// after every CRLF, which shifts every offset reported past it.
+function lineSpans(text) {
+  const spans = [];
   let pos = 0;
-  for (let i = 0; i < parts.length; i++) {
-    yield [i + 1, pos, parts[i]];
-    pos += parts[i].length + 1;
+  LINE_BREAK_RE.lastIndex = 0;
+  let m;
+  while ((m = LINE_BREAK_RE.exec(text)) !== null) {
+    spans.push([pos, m.index]);
+    pos = m.index + m[0].length;
+  }
+  if (pos < text.length) spans.push([pos, text.length]);
+  return spans;
+}
+
+function* iterLines(text) {
+  const spans = lineSpans(text);
+  for (let i = 0; i < spans.length; i++) {
+    yield [i + 1, spans[i][0], text.slice(spans[i][0], spans[i][1])];
   }
 }
 
@@ -79,21 +95,36 @@ function insideInlineCode(line, col) {
 // ---------- RULE-B em/en-dash ----------------------------------------------
 
 const NUMERIC_EN_DASH = /(?<=\d)\u2013(?=\d)/g;
+const LETTER_TOKEN_END = /\p{L}+$/u;
+const LETTER_TOKEN_START = /^\p{L}+/u;
 const ANY_DASH = /[\u2014\u2013]/g;
 
+function isPairedNameEnDash(line, col) {
+  if (line[col] !== '\u2013') return false;
+  const left = line.slice(0, col).match(LETTER_TOKEN_END);
+  const right = line.slice(col + 1).match(LETTER_TOKEN_START);
+  if (!left || !right) return false;
+  const leftInitial = Array.from(left[0])[0];
+  const rightInitial = Array.from(right[0])[0];
+  return leftInitial === leftInitial.toUpperCase()
+    && leftInitial !== leftInitial.toLowerCase()
+    && rightInitial === rightInitial.toUpperCase()
+    && rightInitial !== rightInitial.toLowerCase();
+}
+
 function ruleB(text) {
-  const linesAll = text.split('\n');
+  const linesAll = text.split(/\r\n|[\n\r]/);
   const out = [];
   for (const [lineNo, , line] of iterLines(text)) {
     if (fenceMaskForLineIdx(linesAll, lineNo - 1)) continue;
-    // Allow-list: positions of numeric-range en-dashes.
+    // Allow-list: positions of legitimate joining en-dashes.
     const allowed = new Set();
     let m;
     const numRe = new RegExp(NUMERIC_EN_DASH.source, 'g');
     while ((m = numRe.exec(line)) !== null) allowed.add(m.index);
     const anyRe = new RegExp(ANY_DASH.source, 'g');
     while ((m = anyRe.exec(line)) !== null) {
-      if (allowed.has(m.index)) continue;
+      if (allowed.has(m.index) || isPairedNameEnDash(line, m.index)) continue;
       if (insideInlineCode(line, m.index)) continue;
       const isEm = m[0] === '\u2014';
       out.push({
@@ -110,51 +141,133 @@ function ruleB(text) {
 
 // ---------- RULE-D transition openers --------------------------------------
 
-const TRANSITION_OPENERS = ['Additionally', 'Furthermore', 'Moreover', 'In addition'];
+const TRANSITION_OPENERS = [
+  'Additionally', 'Furthermore', 'Moreover', 'In addition', "What's more", 'Notably',
+];
+const TRANSITION_SENTENCE_RE = new RegExp(
+  '(?:^|[.!?](?:["\')\\]]*)[ \\t]+)(?:["\'(]*)(?<opener>' +
+    [...TRANSITION_OPENERS].sort((a, b) => b.length - a.length)
+      .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') +
+    ')(?![A-Za-z0-9_-])',
+  'gi'
+);
+const TRANSITION_ALLOWANCE_PER_PARAGRAPH = 1;
+// Markdown constructs that open a new block even without a blank line before
+// them: an ATX heading, a table row, a thematic break, and each list item.
+const BLOCK_BOUNDARY_RE = /^(?:#{1,6}[ \t]|\||(?:-{3,}|\*{3,}|_{3,})[ \t]*$|(?:[*+-]|\d+\.)[ \t])/;
 
 function ruleD(text) {
-  const linesAll = text.split('\n');
+  const linesAll = text.split(/\r\n|[\n\r]/);
   const out = [];
+  const paragraphMatches = [];
+  function flushParagraph() {
+    const total = paragraphMatches.length;
+    for (const match of paragraphMatches.slice(TRANSITION_ALLOWANCE_PER_PARAGRAPH)) {
+      const { lineNo, col, line, opener } = match;
+      out.push({
+        rule: 'RULE-D',
+        line: lineNo,
+        column: col,
+        excerpt: excerpt(line, [col - 1, col - 1 + opener.length]),
+        detail: `overused transition opener '${opener}' (${total} in paragraph; first is allowed)`,
+      });
+    }
+    paragraphMatches.length = 0;
+  }
   for (const [lineNo, , line] of iterLines(text)) {
-    if (fenceMaskForLineIdx(linesAll, lineNo - 1)) continue;
+    if (!line.trim()) {
+      flushParagraph();
+      continue;
+    }
+    if (/^\s*(?:```|~~~)/.test(line) || fenceMaskForLineIdx(linesAll, lineNo - 1)) {
+      flushParagraph();
+      continue;
+    }
     const stripped = line.replace(/^\s+/, '');
-    if (!stripped) continue;
     const prefixLen = line.length - stripped.length;
+    // Test the boundary on the text inside any blockquote, not on the raw
+    // line: `> ## Heading` and `> - item` open new blocks just as their
+    // unquoted forms do, and matching before the `>` is stripped misses them.
+    const unquoted = stripped.replace(/^>+\s*/, '');
+    if (BLOCK_BOUNDARY_RE.test(unquoted)) {
+      // A heading, table row, thematic break or new list item starts a new
+      // block. Without this the one-transition allowance leaks across the
+      // boundary, so `Additionally, first.` under one heading makes
+      // `Moreover, second.` under the next read as the paragraph's second
+      // opener.
+      flushParagraph();
+    }
     const afterMarkup = stripped.replace(/^(>+\s*|[*-]\s+)+/, '');
-    const firstWordMatch = afterMarkup.match(/^([A-Za-z][A-Za-z-]*)/);
-    if (!firstWordMatch) continue;
-    const word = firstWordMatch[1];
-    for (const opener of TRANSITION_OPENERS) {
-      const firstTok = opener.split(' ')[0];
-      if (word.toLowerCase() === firstTok.toLowerCase()) {
-        if (opener.includes(' ') && !afterMarkup.toLowerCase().startsWith(opener.toLowerCase())) {
-          continue;
-        }
-        const col = prefixLen + (stripped.length - afterMarkup.length) + 1;
-        out.push({
-          rule: 'RULE-D',
-          line: lineNo,
-          column: col,
-          excerpt: excerpt(line, [col - 1, col - 1 + opener.length]),
-          detail: `transition opener '${opener}'`,
-        });
-        break;
+    if (!afterMarkup.trim()) {
+      // A markup-only line (a bare ">" inside a blockquote, or a lone bullet
+      // marker) separates paragraphs just as a blank line does.
+      flushParagraph();
+      continue;
+    }
+    const contentOffset = prefixLen + stripped.length - afterMarkup.length;
+    const re = new RegExp(TRANSITION_SENTENCE_RE.source, 'gi');
+    let match;
+    while ((match = re.exec(afterMarkup)) !== null) {
+      const opener = match.groups.opener;
+      const openerOffset = match.index + match[0].lastIndexOf(opener);
+      const col = contentOffset + openerOffset + 1;
+      if (!insideInlineCode(line, col - 1)) {
+        paragraphMatches.push({ lineNo, col, line, opener });
       }
     }
   }
+  flushParagraph();
   return out;
 }
 
 // ---------- RULE-G title-case headings -------------------------------------
 
 const LC_WORDS = new Set([
-  'a','an','and','as','at','but','by','for','in','nor',
-  'of','on','or','so','the','to','up','via','vs','yet',
-  'with','over','per','into','from','onto',
+  'a','an','the','and','but','or','nor','of','in','on',
+  'to','for','by','at','with',
 ]);
 
+const QUESTION_OPENERS = new Set([
+  'how','what','when','where','which','who','whom','whose','why',
+]);
+const FINITE_AUXILIARIES = new Set([
+  'am','are','is','was','were','do','does','did','have','has','had','can',
+  'could','may','might','must','shall','should','will','would',
+]);
+const HEADING_TOKEN_RE = /\.?[A-Za-z0-9](?:[A-Za-z0-9'./\\:_-]*[A-Za-z0-9])?/g;
+const VERSION_RE = /^v?\d+(?:\.\d+)+(?:[-+][A-Za-z0-9.-]+)?$/i;
+const FILE_NAME_RE = /^\.?[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,10}$/;
+const UPPER_ID_RE = /^[A-Z]{2,}-[A-Z0-9]+$/;
+
+function stripHeadingMarkup(text) {
+  return text
+    .replace(/(`+)[^`\n]*?\1/g, '')
+    .replace(/!?\[[^\]\n]*\](?:\([^\)\n]*\)|\[[^\]\n]*\])?/g, '')
+    .replace(/<[^>\n]+>/g, '');
+}
+
+function isSentenceStyleHeading(text) {
+  const visible = stripHeadingMarkup(text).trim();
+  if (/[.?!](?:["')\]}*_]+)?$/.test(visible)) return true;
+  const words = visible.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || [];
+  if (words.length === 0) return false;
+  const lowered = words.map((word) => word.toLowerCase());
+  return QUESTION_OPENERS.has(lowered[0]) || lowered.some((word) => FINITE_AUXILIARIES.has(word));
+}
+
+function tokenCannotCarryCase(token) {
+  return token[0] >= '0' && token[0] <= '9'
+    || VERSION_RE.test(token)
+    || UPPER_ID_RE.test(token)
+    || token.startsWith('.')
+    || token.includes('/')
+    || token.includes('\\')
+    || token.includes('_')
+    || FILE_NAME_RE.test(token);
+}
+
 function ruleG(text) {
-  const linesAll = text.split('\n');
+  const linesAll = text.split(/\r\n|[\n\r]/);
   const out = [];
   for (const [lineNo, , line] of iterLines(text)) {
     if (fenceMaskForLineIdx(linesAll, lineNo - 1)) continue;
@@ -162,34 +275,29 @@ function ruleG(text) {
     if (!m) continue;
     const headingText = m[2].trim();
     if (!headingText) continue;
-    // Strip inline code and link targets.
-    let cleaned = headingText.replace(/`[^`]*`/g, '');
-    cleaned = cleaned.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
-    const tokens = cleaned.match(/[A-Za-z][A-Za-z0-9'/-]*/g) || [];
+    if (isSentenceStyleHeading(headingText)) continue;
+    const cleaned = stripHeadingMarkup(headingText);
+    const tokens = (cleaned.match(HEADING_TOKEN_RE) || [])
+      .filter((token) => /[A-Za-z]/.test(token));
     if (tokens.length === 0) continue;
     const problem = [];
     for (let idx = 0; idx < tokens.length; idx++) {
       const tok = tokens[idx];
-      if (tok.includes('-')) {
-        for (const sub of tok.split('-')) {
-          if (sub && !isTitlecased(sub, idx === 0, false)) {
-            problem.push(tok);
-            break;
-          }
-        }
-        continue;
-      }
+      if (tokenCannotCarryCase(tok)) continue;
       const isFirst = idx === 0;
       const isLast = idx === tokens.length - 1;
-      const shouldBeLc = LC_WORDS.has(tok.toLowerCase());
-      if (isFirst || isLast) {
-        if (!isTitlecased(tok, true, false)) problem.push(tok);
-        continue;
-      }
-      if (shouldBeLc) {
-        if (tok !== tok.toLowerCase()) problem.push(tok);
-      } else {
-        if (!isTitlecased(tok, false, false)) problem.push(tok);
+      const parts = tok.split('-');
+      for (let partIdx = 0; partIdx < parts.length; partIdx++) {
+        const part = parts[partIdx];
+        if (!part || tokenCannotCarryCase(part)) continue;
+        const partIsFirst = isFirst && partIdx === 0;
+        const partIsLast = isLast && partIdx === parts.length - 1;
+        const shouldBeLc = LC_WORDS.has(part.toLowerCase()) && !partIsFirst && !partIsLast;
+        const valid = shouldBeLc ? part === part.toLowerCase() : isTitlecased(part);
+        if (!valid) {
+          problem.push(tok);
+          break;
+        }
       }
     }
     if (problem.length > 0) {
@@ -205,18 +313,18 @@ function ruleG(text) {
   return out;
 }
 
-function isTitlecased(word, isFirst, isLc) {
+function isTitlecased(word) {
   if (!word) return true;
-  if (isLc && !isFirst) return word === word.toLowerCase();
-  return /[A-Z0-9]/.test(word[0]);
+  return /[A-Z]/.test(word[0]);
 }
 
 // ---------- RULE-I contractions --------------------------------------------
 
-const CONTRACTION_RE = /\b(?:[A-Za-z]+'(?:s|t|re|ll|d|ve|m)|it's|don't|won't|can't|shan't|isn't|aren't|wasn't|weren't|I'm)\b/gi;
+// Ambiguous 's and 'd endings require closed host-word lists.
+const CONTRACTION_RE = /\b(?:(?:it|that|he|she|there|here|what|who|where|when|how|let)'s|(?:i|you|he|she|it|we|they|that|who|what|which|why|there|where|how)'d|[A-Za-z]+n't|[A-Za-z]+'(?:re|ll|ve|m))\b/gi;
 
 function ruleI(text) {
-  const linesAll = text.split('\n');
+  const linesAll = text.split(/\r\n|[\n\r]/);
   const out = [];
   for (const [lineNo, , line] of iterLines(text)) {
     if (fenceMaskForLineIdx(linesAll, lineNo - 1)) continue;
@@ -239,7 +347,7 @@ function ruleI(text) {
 // ---------- RULE-12 sentence length > 30 -----------------------------------
 
 function rule12(text) {
-  const linesAll = text.split('\n');
+  const linesAll = text.split(/\r\n|[\n\r]/);
   const out = [];
   for (const [lineNo, , line] of iterLines(text)) {
     if (fenceMaskForLineIdx(linesAll, lineNo - 1)) continue;
@@ -279,19 +387,25 @@ const CLICHE_PHRASES = [
 ];
 
 function rule05(text) {
-  const linesAll = text.split('\n');
-  const lowered = text.toLowerCase();
+  const linesAll = text.split(/\r\n|[\n\r]/);
+  const spans = lineSpans(text);
+  const starts = spans.map((s) => s[0]);
   const out = [];
   for (const phrase of CLICHE_PHRASES) {
-    const pLow = phrase.toLowerCase();
-    let start = 0;
-    while (true) {
-      const idx = lowered.indexOf(pLow, start);
-      if (idx === -1) break;
-      const lineNo = text.slice(0, idx).split('\n').length;
-      const lineStart = text.lastIndexOf('\n', idx - 1) + 1;
-      const nextNl = text.indexOf('\n', lineStart);
-      const lineEnd = nextNl === -1 ? text.length : nextNl;
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?<![A-Za-z0-9_])${escaped}(?![A-Za-z0-9_])`, 'gi');
+    let match;
+    while ((match = re.exec(text)) !== null) {
+      const idx = match.index;
+      // Locate the match against the same CR/LF/CRLF line model that produced
+      // linesAll. Searching for "\n" alone puts a match that follows a bare CR
+      // on the previous line and gives it that line's column.
+      let lineNo = 1;
+      for (let lo = 0, hi = starts.length; lo < hi; ) {
+        const mid = (lo + hi) >> 1;
+        if (starts[mid] <= idx) { lineNo = mid + 1; lo = mid + 1; } else hi = mid;
+      }
+      const [lineStart, lineEnd] = spans[lineNo - 1];
       const col = idx - lineStart + 1;
       if (!fenceMaskForLineIdx(linesAll, lineNo - 1)) {
         const lineText = text.slice(lineStart, lineEnd);
@@ -305,7 +419,6 @@ function rule05(text) {
           });
         }
       }
-      start = idx + pLow.length;
     }
   }
   return out;
@@ -313,6 +426,8 @@ function rule05(text) {
 
 // ---------- RULE-06 jargon / banned AI-tell list ---------------------------
 
+// This 54-entry list combines the 45-word banned AI-tell list with 9 forms of
+// 3 RULE-06 BAD-example callouts.
 const JARGON_WORDS = [
   // 45-word banned AI-tell list
   'encompass','burgeoning','pivotal','realm','keen','adept','endeavor',
@@ -323,7 +438,7 @@ const JARGON_WORDS = [
   'garner','undermine','gauge','facet','bolster','groundbreaking',
   'game-changing','reimagine','turnkey','intricate','trailblazing',
   'unprecedented',
-  // Orwell Rule 5 jargon callouts
+  // 9 forms of 3 RULE-06 BAD-example callouts
   'leverages','leveraging','leverage',
   'utilize','utilizes','utilizing',
   'facilitate','facilitates','facilitating',
@@ -337,7 +452,7 @@ const JARGON_RE = new RegExp(
 );
 
 function rule06(text) {
-  const linesAll = text.split('\n');
+  const linesAll = text.split(/\r\n|[\n\r]/);
   const out = [];
   for (const [lineNo, , line] of iterLines(text)) {
     if (fenceMaskForLineIdx(linesAll, lineNo - 1)) continue;
@@ -369,4 +484,7 @@ const DISPATCH = {
   'RULE-06': rule06,
 };
 
-module.exports = { run };
+// lineSpans is exported for the boundary tests: it is the detector's own
+// CR/LF/CRLF line model, and `audit` normalises on read, so a direct-text
+// caller is the only path that exercises it.
+module.exports = { run, lineSpans };

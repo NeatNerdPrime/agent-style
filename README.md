@@ -333,7 +333,7 @@ For `style-review` specifically, ask:
 
 Expected reply:
 
-> style-review active: audit 21 rules (deterministic: RULE-B, D, G, I, 12, 05, 06, A, C, E; semantic via host: RULE-01, 03, 04, 08, 11, F, H); workflow at skills/style-review/SKILL.md.
+> style-review active: 21-row scorecard, 18 rules checked (deterministic: RULE-B, D, G, I, 12, 05, 06, A, C, E; semantic via host: RULE-01, 03, 04, 07, 08, 11, F, H; skipped: RULE-02, 09, 10); workflow at skills/style-review/SKILL.md.
 
 If the version string or rule count is missing, the file is on disk but not in your agent's active context. Check that your tool's instruction-file reload behavior picked up the new content (some tools require a session restart).
 
@@ -358,7 +358,7 @@ npx anywhere-agents        # Node.js path
 
 Opt out by adding `rule_packs: []` to `agent-config.yaml` at your project root; pin to a specific ref or swap for a fork via `rule_packs: - name: agent-style\n    ref: <tag>`. See [anywhere-agents rule-pack composition docs](https://github.com/yzhao062/anywhere-agents/blob/main/docs/rule-pack-composition.md) for the full contract.
 
-### v0.3.0 Roadmap
+### v0.3.6+ Roadmap
 
 Planned CLI additions: `agent-style update` (refresh installed adapters to latest), `agent-style override <RULE-ID> disable` (per-rule opt-out), `agent-style clean` (one-command uninstall), `.agent-style/config.toml` (project-level config), RULE-02 / 07 / 09 / 10 structural detectors filled in, and filled adapters for the planned-adapter set above (v1.1). Track progress in [`CHANGELOG.md`](CHANGELOG.md).
 

@@ -1,11 +1,10 @@
 {
   "fixture": "mixed.md",
   "purpose": "Realistic commit-message / PR-description prose that exercises both mechanical and structural detectors in the same document. Used for the end-to-end smoke test in unit tests and as a demo fixture in the skill's SKILL.md reference.",
-  "total_violations": 11,
+  "total_violations": 10,
   "per_rule_count": {
     "RULE-05": 3,
     "RULE-06": 2,
-    "RULE-A": 1,
     "RULE-B": 1,
     "RULE-E": 2,
     "RULE-I": 2

@@ -15,11 +15,15 @@
 #
 # Usage:
 #   bash scripts/bench/run.sh --runner <claude|gemini|openai|codex|copilot> --model <id> \
-#                             [--output PATH] [--generations N] [--keep-scratch]
+#                             [--output PATH] [--generations N] [--drafts PATH]
+#                             [--keep-scratch]
 #
 # Flags:
 #   --output PATH       Override default scorecard path (docs/bench-<VER>-<RUNNER>.md).
 #   --generations N     1 or 2. N=2 matches the published v0.2.0 bench methodology.
+#   --drafts PATH       Re-score existing drafts instead of generating new ones. PATH
+#                       must contain <task>-{baseline,treatment}/draft-<gen>.md.
+#                       This mode uses the Python review engine from this clone.
 #   --keep-scratch      Do not delete the scratch dir holding per-task drafts at exit.
 #                       Prints the path so you can inspect generated prose.
 #
@@ -70,6 +74,7 @@ RUNNER=""
 MODEL=""
 OUTPUT=""
 GENS=2
+DRAFTS=""
 KEEP_SCRATCH="${KEEP_SCRATCH:-0}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -77,6 +82,17 @@ while [[ $# -gt 0 ]]; do
     --model) MODEL="$2"; shift 2 ;;
     --output) OUTPUT="$2"; shift 2 ;;
     --generations) GENS="$2"; shift 2 ;;
+    # Fail closed on an empty value. Every mode gate below tests only
+    # `[[ -n "$DRAFTS" ]]`, so `--drafts "$UNSET_VAR"` would otherwise fall
+    # silently into generation mode and spend real model calls.
+    --drafts)
+      [[ $# -ge 2 && -n "$2" ]] || {
+        echo "error: --drafts requires a non-empty PATH" >&2
+        exit 2
+      }
+      DRAFTS="$2"
+      shift 2
+      ;;
     --keep-scratch) KEEP_SCRATCH=1; shift ;;
     --help|-h) awk 'NR > 1 && /^set -euo pipefail$/ { exit } NR > 1 { print }' "$0"; exit 0 ;;
     *) echo "error: unknown arg: $1" >&2; exit 2 ;;
@@ -90,6 +106,11 @@ case "${RUNNER:-}" in
 esac
 [[ -n "$MODEL" ]] || { echo "error: --model required" >&2; exit 2; }
 
+if [[ -n "$DRAFTS" ]]; then
+  [[ -d "$DRAFTS" ]] || { echo "error: --drafts directory not found: $DRAFTS" >&2; exit 2; }
+  DRAFTS="$(cd "$DRAFTS" && pwd)"
+fi
+
 # Hard cap on --generations. The published bench methodology and the
 # local runtime assumptions in RELEASING.md "Bench (Local Only)" assume
 # 2 generations. Anything higher multiplies calls proportionally; a typo
@@ -102,46 +123,76 @@ case "$GENS" in
 esac
 
 # Shared dependencies.
-command -v agent-style >/dev/null 2>&1 || { echo "error: agent-style CLI not on PATH" >&2; exit 2; }
+if [[ -z "$DRAFTS" ]]; then
+  command -v agent-style >/dev/null 2>&1 || { echo "error: agent-style CLI not on PATH" >&2; exit 2; }
+fi
 command -v jq >/dev/null 2>&1 || { echo "error: jq is required" >&2; exit 2; }
+
+# Per-runner labels are also used when replaying saved drafts. Replay does not
+# call a model runner and therefore does not require its CLI or credentials.
+case "$RUNNER" in
+  claude)  RUNNER_LABEL="Claude Code CLI ($MODEL)" ;;
+  gemini)  RUNNER_LABEL="Gemini CLI ($MODEL)" ;;
+  codex)   RUNNER_LABEL="Codex CLI ($MODEL)" ;;
+  copilot) RUNNER_LABEL="GitHub Copilot CLI ($MODEL)" ;;
+  openai)  RUNNER_LABEL="OpenAI Agents SDK ($MODEL)" ;;
+esac
 
 # Per-runner env + CLI presence checks. API keys are SOFT checks: the
 # subscription-backed CLIs (claude, codex, copilot, gemini) authenticate via
 # their own login flow, so missing env keys are a warning, not an error.
 # Only `openai` (SDK) hard-requires OPENAI_API_KEY because it talks to the
 # API directly without a CLI shim.
-case "$RUNNER" in
-  claude)
-    command -v claude >/dev/null 2>&1 || { echo "error: claude CLI not on PATH (curl -fsSL https://claude.ai/install.sh | sh, or native installer)" >&2; exit 2; }
-    [[ -n "${ANTHROPIC_API_KEY:-}" ]] || echo "info: ANTHROPIC_API_KEY not set; using Claude Code subscription auth" >&2
-    RUNNER_LABEL="Claude Code CLI ($MODEL)"
-    ;;
-  gemini)
-    command -v gemini >/dev/null 2>&1 || { echo "error: gemini CLI not on PATH (npm install -g @google/gemini-cli)" >&2; exit 2; }
-    [[ -n "${GEMINI_API_KEY:-}" ]] || echo "info: GEMINI_API_KEY not set; using Gemini CLI login (Google AI Studio / Gemini Advanced)" >&2
-    RUNNER_LABEL="Gemini CLI ($MODEL)"
-    ;;
-  codex)
-    command -v codex >/dev/null 2>&1 || { echo "error: codex CLI not on PATH (npm install -g @openai/codex)" >&2; exit 2; }
-    [[ -n "${OPENAI_API_KEY:-}" ]] || echo "info: OPENAI_API_KEY not set; using Codex CLI subscription auth (ChatGPT Plus/Pro)" >&2
-    RUNNER_LABEL="Codex CLI ($MODEL)"
-    ;;
-  copilot)
-    command -v copilot >/dev/null 2>&1 || { echo "error: copilot CLI not on PATH (winget install GitHub.Copilot on Windows, or see https://docs.github.com/copilot/how-tos/copilot-cli)" >&2; exit 2; }
-    RUNNER_LABEL="GitHub Copilot CLI ($MODEL)"
-    ;;
-  openai)
-    [[ -n "${OPENAI_API_KEY:-}" ]] || { echo "error: OPENAI_API_KEY must be set for --runner openai (SDK has no subscription path; use --runner codex for ChatGPT Plus subscription)" >&2; exit 2; }
-    PYTHON_BIN="${PYTHON_BIN:-}"
-    if [[ -z "$PYTHON_BIN" ]]; then
-      if command -v python3 >/dev/null 2>&1; then PYTHON_BIN="$(command -v python3)"
-      elif command -v python >/dev/null 2>&1; then PYTHON_BIN="$(command -v python)"
-      else echo "error: no python interpreter for --runner openai" >&2; exit 2; fi
-    fi
-    "$PYTHON_BIN" -c "import agents" 2>/dev/null || { echo "error: openai-agents not importable (pip install openai-agents)" >&2; exit 2; }
-    RUNNER_LABEL="OpenAI Agents SDK ($MODEL)"
-    ;;
-esac
+if [[ -z "$DRAFTS" ]]; then
+  case "$RUNNER" in
+    claude)
+      command -v claude >/dev/null 2>&1 || { echo "error: claude CLI not on PATH (curl -fsSL https://claude.ai/install.sh | sh, or native installer)" >&2; exit 2; }
+      [[ -n "${ANTHROPIC_API_KEY:-}" ]] || echo "info: ANTHROPIC_API_KEY not set; using Claude Code subscription auth" >&2
+      ;;
+    gemini)
+      command -v gemini >/dev/null 2>&1 || { echo "error: gemini CLI not on PATH (npm install -g @google/gemini-cli)" >&2; exit 2; }
+      [[ -n "${GEMINI_API_KEY:-}" ]] || echo "info: GEMINI_API_KEY not set; using Gemini CLI login (Google AI Studio / Gemini Advanced)" >&2
+      ;;
+    codex)
+      command -v codex >/dev/null 2>&1 || { echo "error: codex CLI not on PATH (npm install -g @openai/codex)" >&2; exit 2; }
+      [[ -n "${OPENAI_API_KEY:-}" ]] || echo "info: OPENAI_API_KEY not set; using Codex CLI subscription auth (ChatGPT Plus/Pro)" >&2
+      ;;
+    copilot)
+      command -v copilot >/dev/null 2>&1 || { echo "error: copilot CLI not on PATH (winget install GitHub.Copilot on Windows, or see https://docs.github.com/copilot/how-tos/copilot-cli)" >&2; exit 2; }
+      ;;
+    openai)
+      [[ -n "${OPENAI_API_KEY:-}" ]] || { echo "error: OPENAI_API_KEY must be set for --runner openai (SDK has no subscription path; use --runner codex for ChatGPT Plus subscription)" >&2; exit 2; }
+      PYTHON_BIN="${PYTHON_BIN:-}"
+      if [[ -z "$PYTHON_BIN" ]]; then
+        if command -v python3 >/dev/null 2>&1; then PYTHON_BIN="$(command -v python3)"
+        elif command -v python >/dev/null 2>&1; then PYTHON_BIN="$(command -v python)"
+        else echo "error: no python interpreter for --runner openai" >&2; exit 2; fi
+      fi
+      "$PYTHON_BIN" -c "import agents" 2>/dev/null || { echo "error: openai-agents not importable (pip install openai-agents)" >&2; exit 2; }
+      ;;
+  esac
+fi
+
+if [[ -n "$DRAFTS" ]]; then
+  PYTHON_BIN="${PYTHON_BIN:-}"
+  if [[ -z "$PYTHON_BIN" ]]; then
+    if command -v python3 >/dev/null 2>&1; then PYTHON_BIN="$(command -v python3)"
+    elif command -v python >/dev/null 2>&1; then PYTHON_BIN="$(command -v python)"
+    else echo "error: no Python interpreter for --drafts replay" >&2; exit 2; fi
+  fi
+  (cd "$ROOT/packages/pypi" && "$PYTHON_BIN" -c "import agent_style") 2>/dev/null || {
+    echo "error: local Python agent_style package is not importable" >&2
+    exit 2
+  }
+fi
+
+run_agent_style() {
+  if [[ -n "$DRAFTS" ]]; then
+    (cd "$ROOT/packages/pypi" && "$PYTHON_BIN" -m agent_style.cli "$@")
+  else
+    agent-style "$@"
+  fi
+}
 
 # Force subscription-backed auth for the 4 CLI runners. If the
 # maintainer's shell has a provider API key set (ANTHROPIC_API_KEY,
@@ -158,7 +209,7 @@ case "$RUNNER" in
   openai)  : ;; # Intentional API use; OPENAI_API_KEY required.
 esac
 
-AS_VERSION="$(agent-style --version | awk '{print $2}')"
+AS_VERSION="$(run_agent_style --version | awk '{print $2}')"
 if [[ -z "$OUTPUT" ]]; then
   OUTPUT="$ROOT/docs/bench-${AS_VERSION}-${RUNNER}.md"
 fi
@@ -340,7 +391,10 @@ generate_draft() {
   echo "- Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "- agent-style version: ${AS_VERSION}"
   echo ""
-  echo "## Per-task per-rule delta (mechanical + structural; semantic excluded)"
+  # Every scoring call below passes --mechanical-only, so the structural
+  # detectors never run. The old "mechanical + structural" heading claimed
+  # coverage this harness has never had.
+  echo "## Per-task per-rule delta (mechanical only; structural and semantic excluded)"
   echo ""
   echo "| Task | Baseline total | Treatment total | Delta | Dominant rule |"
   echo "|---|---|---|---|---|"
@@ -359,19 +413,37 @@ while IFS= read -r TASK_ID; do
   PROMPT_FILE="$SCRATCH/prompt/$TASK_ID.txt"
   [[ -s "$PROMPT_FILE" ]] || { echo "warning: empty prompt for $TASK_ID; skipping" >&2; continue; }
   echo "--- task: $TASK_ID ---"
-  TASK_A="$SCRATCH/$TASK_ID-baseline"
-  TASK_B="$SCRATCH/$TASK_ID-treatment"
-  mkdir -p "$TASK_A" "$TASK_B"
-  setup_workspace "$TASK_A" baseline
-  setup_workspace "$TASK_B" treatment
+  if [[ -n "$DRAFTS" ]]; then
+    TASK_A="$DRAFTS/$TASK_ID-baseline"
+    TASK_B="$DRAFTS/$TASK_ID-treatment"
+    [[ -d "$TASK_A" ]] || { echo "error: missing saved-draft directory: $TASK_A" >&2; exit 2; }
+    [[ -d "$TASK_B" ]] || { echo "error: missing saved-draft directory: $TASK_B" >&2; exit 2; }
+  else
+    TASK_A="$SCRATCH/$TASK_ID-baseline"
+    TASK_B="$SCRATCH/$TASK_ID-treatment"
+    mkdir -p "$TASK_A" "$TASK_B"
+    setup_workspace "$TASK_A" baseline
+    setup_workspace "$TASK_B" treatment
+  fi
 
   TASK_A_TOTAL=0
   TASK_B_TOTAL=0
   for gen in $(seq 1 "$GENS"); do
-    # generate_draft fails closed on any runner error or short draft, so drafts
-    # here are guaranteed to be non-empty and past the min-bytes gate.
-    generate_draft "$TASK_A" baseline "$gen" "$PROMPT_FILE"
-    A_JSON="$(agent-style review --mechanical-only --audit-only "$TASK_A/draft-${gen}.md")"
+    if [[ -n "$DRAFTS" ]]; then
+      for saved_draft in "$TASK_A/draft-${gen}.md" "$TASK_B/draft-${gen}.md"; do
+        [[ -f "$saved_draft" ]] || { echo "error: missing saved draft: $saved_draft" >&2; exit 2; }
+        saved_bytes="$(wc -c < "$saved_draft" 2>/dev/null || echo 0)"
+        [[ "$saved_bytes" -ge "$MIN_DRAFT_BYTES" ]] || {
+          echo "error: saved draft too short ($saved_bytes < $MIN_DRAFT_BYTES bytes): $saved_draft" >&2
+          exit 2
+        }
+      done
+    else
+      # generate_draft fails closed on any runner error or short draft, so drafts
+      # here are guaranteed to be non-empty and past the min-bytes gate.
+      generate_draft "$TASK_A" baseline "$gen" "$PROMPT_FILE"
+    fi
+    A_JSON="$(run_agent_style review --mechanical-only --audit-only "$TASK_A/draft-${gen}.md")"
     if ! A_TOTAL="$(jq -er '.total_violations | numbers' <<<"$A_JSON")"; then
       echo "::error::scorer JSON lacks numeric .total_violations for $TASK_ID baseline gen-$gen" >&2
       echo "$A_JSON" >&2
@@ -384,8 +456,10 @@ while IFS= read -r TASK_ID; do
       | reduce .[] as $r ($acc[0]; .[$r.rule] = (. [$r.rule] // 0) + $r.count)
     ' > "$SCRATCH/acc.json" && mv "$SCRATCH/acc.json" "$PER_RULE_A_FILE"
 
-    generate_draft "$TASK_B" treatment "$gen" "$PROMPT_FILE"
-    B_JSON="$(agent-style review --mechanical-only --audit-only "$TASK_B/draft-${gen}.md")"
+    if [[ -z "$DRAFTS" ]]; then
+      generate_draft "$TASK_B" treatment "$gen" "$PROMPT_FILE"
+    fi
+    B_JSON="$(run_agent_style review --mechanical-only --audit-only "$TASK_B/draft-${gen}.md")"
     if ! B_TOTAL="$(jq -er '.total_violations | numbers' <<<"$B_JSON")"; then
       echo "::error::scorer JSON lacks numeric .total_violations for $TASK_ID treatment gen-$gen" >&2
       echo "$B_JSON" >&2
@@ -403,8 +477,8 @@ while IFS= read -r TASK_ID; do
   GRAND_B=$((GRAND_B + TASK_B_TOTAL))
   DELTA=$((TASK_B_TOTAL - TASK_A_TOTAL))
 
-  # Gen-1 drafts are guaranteed non-empty by generate_draft's fail-closed contract.
-  DOMINANT="$(agent-style review --mechanical-only --compare "$TASK_A/draft-1.md" "$TASK_B/draft-1.md" \
+  # Gen-1 drafts are guaranteed non-empty by generation or replay validation.
+  DOMINANT="$(run_agent_style review --mechanical-only --compare "$TASK_A/draft-1.md" "$TASK_B/draft-1.md" \
     | jq -r '.per_rule_delta | to_entries | map(select(.value.delta != 0)) | sort_by(.value.delta) | .[0].key // "—"')"
 
   printf "| %s | %s | %s | %s | %s |\n" "$TASK_ID" "$TASK_A_TOTAL" "$TASK_B_TOTAL" "$DELTA" "$DOMINANT" >> "$OUTPUT"

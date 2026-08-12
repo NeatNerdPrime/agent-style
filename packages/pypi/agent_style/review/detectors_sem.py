@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Semantic-detector stubs.
 
-Semantic rules (RULE-01, 03, 04, 08, 11, F, H) require an LLM judge and are only
+Semantic rules (RULE-01, 03, 04, 07, 08, 11, F, H) require an LLM judge and are only
 available from a skill host (Claude Code, Anthropic Skills). The plain CLI
 surfaces them as ``status="skipped"`` with an actionable note, per PLAN Rev 4.
 

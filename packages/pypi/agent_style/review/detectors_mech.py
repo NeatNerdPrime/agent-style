@@ -3,14 +3,14 @@
 
 Rules covered (per PLAN Rev 3 detector matrix):
   RULE-B  em/en-dash casual use (excludes numeric ranges and paired names)
-  RULE-D  transition openers Additionally / Furthermore / Moreover / In addition
+  RULE-D  overused sentence-initial transition openers from the six-item rule list
   RULE-G  heading title-case per RULE-G's own convention (lowercase articles,
           short prepositions, coordinating conjunctions; capitalize everything else)
   RULE-I  contractions in formal prose
   RULE-05 dying metaphors / clichés (regex against a small cliché list derived
           from Orwell 1946 and the rule's BAD examples)
-  RULE-06 avoidable jargon (regex against the jargon list from Orwell 1946 Rule 5
-          plus the 45-word banned AI-tell list adjacent to RULE-06)
+  RULE-06 avoidable jargon (regex against a 54-entry list: the 45-word banned
+          AI-tell list adjacent to RULE-06 plus 9 forms of 3 RULE-06 callouts)
   RULE-12 sentence length > 30 words
 
 Plus a single "banned AI-tell list" detector which is covered under RULE-06's
@@ -22,6 +22,7 @@ returns a RuleResult with zero or more Violation entries.
 
 from __future__ import annotations
 
+import bisect
 import re
 from dataclasses import dataclass
 from typing import Callable
@@ -72,12 +73,31 @@ def _excerpt(line_text: str, span: tuple[int, int], width: int = 120) -> str:
     return out
 
 
+_LINE_BREAK_RE = re.compile(r"\r\n|[\n\r]")
+
+
+def _line_spans(text: str) -> list[tuple[int, int]]:
+    """Return the (start, end) offset of each line, aligned 1:1 with splitlines().
+
+    ``str.splitlines`` recognises CR, LF and CRLF. Any offset arithmetic that
+    locates a match inside ``text`` has to recognise the same three, or a CRLF
+    pair costs one character and a bare CR costs a whole line break, shifting
+    every line and column reported after it.
+    """
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    for match in _LINE_BREAK_RE.finditer(text):
+        spans.append((pos, match.start()))
+        pos = match.end()
+    if pos < len(text):
+        spans.append((pos, len(text)))
+    return spans
+
+
 def _iter_lines(text: str):
     """Yield (line_no, col_start, line_text) for each line (1-indexed)."""
-    pos = 0
-    for i, line in enumerate(text.splitlines(keepends=False), start=1):
-        yield i, pos, line
-        pos += len(line) + 1  # +1 for the stripped newline
+    for i, (start, end) in enumerate(_line_spans(text), start=1):
+        yield i, start, text[start:end]
 
 
 def _inside_code_fence(lines: list[str], target_idx: int) -> bool:
@@ -109,8 +129,21 @@ def _inside_inline_code(line: str, col: int) -> bool:
 # En-dash used as numeric range: preceding digit and following digit.
 _NUMERIC_EN_DASH = re.compile(r"(?<=\d)[\u2013](?=\d)")
 
-# Any em-dash or en-dash we want to flag (we subtract numeric-range en-dashes).
+# Letter-only tokens immediately before and after a candidate paired-name dash.
+_LETTER_TOKEN_END = re.compile(r"[^\W\d_]+$")
+_LETTER_TOKEN_START = re.compile(r"^[^\W\d_]+")
+
+# Any em-dash or en-dash we want to flag (we subtract allowed en-dashes).
 _ANY_DASH = re.compile(r"[\u2014\u2013]")
+
+
+def _is_paired_name_en_dash(line: str, col: int) -> bool:
+    """Return whether ``col`` joins two capitalized name tokens with an en dash."""
+    if line[col] != "\u2013":
+        return False
+    left = _LETTER_TOKEN_END.search(line[:col])
+    right = _LETTER_TOKEN_START.match(line[col + 1 :])
+    return bool(left and right and left.group()[0].isupper() and right.group()[0].isupper())
 
 
 def _rule_b(text: str) -> list[Violation]:
@@ -118,6 +151,7 @@ def _rule_b(text: str) -> list[Violation]:
 
     Excludes:
       - en-dashes in numeric ranges (e.g. 2022–2026)
+      - en-dashes in paired names (e.g. Cauchy–Schwarz)
       - anything inside code fences or inline backtick spans
     """
     lines_all = text.splitlines()
@@ -125,10 +159,10 @@ def _rule_b(text: str) -> list[Violation]:
     for line_no, _col0, line in _iter_lines(text):
         if _inside_code_fence(lines_all, line_no - 1):
             continue
-        # Build allow-list: positions of numeric-range en-dashes on this line.
+        # Build allow-list: positions of legitimate joining en-dashes on this line.
         allowed = {m.start() for m in _NUMERIC_EN_DASH.finditer(line)}
         for m in _ANY_DASH.finditer(line):
-            if m.start() in allowed:
+            if m.start() in allowed or _is_paired_name_en_dash(line, m.start()):
                 continue
             if _inside_inline_code(line, m.start()):
                 continue
@@ -152,63 +186,152 @@ _TRANSITION_OPENERS = (
     "Furthermore",
     "Moreover",
     "In addition",
+    "What's more",
+    "Notably",
 )
-_TRANSITION_OPENER_RE = re.compile(
-    r"(?:^|\n)\s*(?:>\s*|[*-]\s+)*(" + "|".join(re.escape(t) for t in _TRANSITION_OPENERS) + r")\b",
+_TRANSITION_SENTENCE_RE = re.compile(
+    r"(?:^|[.!?](?:[\"')\]]*)[ \t]+)(?:[\"'(]*)(?P<opener>"
+    + "|".join(re.escape(t) for t in sorted(_TRANSITION_OPENERS, key=len, reverse=True))
+    + r")(?![A-Za-z0-9_-])",
     re.IGNORECASE,
+)
+_TRANSITION_ALLOWANCE_PER_PARAGRAPH = 1
+# Markdown constructs that open a new block even without a blank line before
+# them: an ATX heading, a table row, a thematic break, and each list item.
+_BLOCK_BOUNDARY_RE = re.compile(
+    r"^(?:#{1,6}[ \t]|\||(?:-{3,}|\*{3,}|_{3,})[ \t]*$|(?:[*+-]|\d+\.)[ \t])"
 )
 
 
 def _rule_d(text: str) -> list[Violation]:
-    """Flag transition openers at sentence start on any line."""
+    """Flag transition openers after the first one in each paragraph."""
     out: list[Violation] = []
     lines_all = text.splitlines()
-    for line_no, _col0, line in _iter_lines(text):
-        if _inside_code_fence(lines_all, line_no - 1):
-            continue
-        # Match only at the start of the logical sentence/line.
-        stripped = line.lstrip()
-        if not stripped:
-            continue
-        # Detect leading blockquote/list markers so we compare against the first
-        # word token after them.
-        prefix_len = len(line) - len(stripped)
-        after_markup = re.sub(r"^(>+\s*|[*-]\s+)+", "", stripped)
-        first_word = re.match(r"([A-Za-z][A-Za-z-]*)", after_markup)
-        if not first_word:
-            continue
-        word = first_word.group(1)
-        for opener in _TRANSITION_OPENERS:
-            if word.lower() == opener.split()[0].lower():
-                # For multi-word openers ("In addition"), check the full phrase.
-                if " " in opener:
-                    if not after_markup.lower().startswith(opener.lower()):
-                        continue
-                col = prefix_len + (len(stripped) - len(after_markup)) + 1
-                out.append(
-                    Violation(
-                        rule="RULE-D",
-                        line=line_no,
-                        column=col,
-                        excerpt=_excerpt(line, (col - 1, col - 1 + len(opener))),
-                        detail=f"transition opener '{opener}'",
-                    )
+    paragraph_matches: list[tuple[int, int, str, str]] = []
+
+    def flush_paragraph() -> None:
+        total = len(paragraph_matches)
+        excess_matches = paragraph_matches[_TRANSITION_ALLOWANCE_PER_PARAGRAPH:]
+        for line_no, col, line, opener in excess_matches:
+            out.append(
+                Violation(
+                    rule="RULE-D",
+                    line=line_no,
+                    column=col,
+                    excerpt=_excerpt(line, (col - 1, col - 1 + len(opener))),
+                    detail=(
+                        f"overused transition opener '{opener}' "
+                        f"({total} in paragraph; first is allowed)"
+                    ),
                 )
-                break
+            )
+        paragraph_matches.clear()
+
+    for line_no, _col0, line in _iter_lines(text):
+        if not line.strip():
+            flush_paragraph()
+            continue
+        if (
+            line.lstrip().startswith(("```", "~~~"))
+            or _inside_code_fence(lines_all, line_no - 1)
+        ):
+            flush_paragraph()
+            continue
+        stripped = line.lstrip()
+        prefix_len = len(line) - len(stripped)
+        # Test the boundary on the text inside any blockquote, not on the raw
+        # line: `> ## Heading` and `> - item` open new blocks just as their
+        # unquoted forms do, and matching before the `>` is stripped misses them.
+        unquoted = re.sub(r"^>+\s*", "", stripped)
+        if _BLOCK_BOUNDARY_RE.match(unquoted):
+            # A heading, table row, thematic break or new list item starts a new
+            # block. Without this the one-transition allowance leaks across the
+            # boundary, so `Additionally, first.` under one heading makes
+            # `Moreover, second.` under the next read as the paragraph's second
+            # opener.
+            flush_paragraph()
+        after_markup = re.sub(r"^(>+\s*|[*-]\s+)+", "", stripped)
+        if not after_markup.strip():
+            # A markup-only line (a bare ">" inside a blockquote, or a lone
+            # bullet marker) separates paragraphs just as a blank line does.
+            flush_paragraph()
+            continue
+        content_offset = prefix_len + len(stripped) - len(after_markup)
+        for match in _TRANSITION_SENTENCE_RE.finditer(after_markup):
+            opener = match.group("opener")
+            col = content_offset + match.start("opener") + 1
+            if not _inside_inline_code(line, col - 1):
+                paragraph_matches.append((line_no, col, line, opener))
+    flush_paragraph()
     return out
 
 
 # ---------- RULE-G title-case headings --------------------------------------
 
 
-# Words always lowercase in title case (Chicago-lite used by RULE-G):
+# Words always lowercase in title case, exactly as enumerated by RULE-G.
 _LC_WORDS = frozenset(
     {
-        "a", "an", "and", "as", "at", "but", "by", "for", "in", "nor",
-        "of", "on", "or", "so", "the", "to", "up", "via", "vs", "yet",
-        "with", "over", "per", "into", "from", "onto",
+        "a", "an", "the", "and", "but", "or", "nor", "of", "in", "on",
+        "to", "for", "by", "at", "with",
     }
 )
+
+_QUESTION_OPENERS = frozenset(
+    {"how", "what", "when", "where", "which", "who", "whom", "whose", "why"}
+)
+_FINITE_AUXILIARIES = frozenset(
+    {
+        "am", "are", "is", "was", "were", "do", "does", "did", "have",
+        "has", "had", "can", "could", "may", "might", "must", "shall",
+        "should", "will", "would",
+    }
+)
+_HEADING_TOKEN_RE = re.compile(
+    r"\.?[A-Za-z0-9](?:[A-Za-z0-9'./\\:_-]*[A-Za-z0-9])?"
+)
+_VERSION_RE = re.compile(
+    r"v?\d+(?:\.\d+)+(?:[-+][A-Za-z0-9.-]+)?$", re.IGNORECASE
+)
+_FILE_NAME_RE = re.compile(r"\.?[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,10}$")
+_UPPER_ID_RE = re.compile(r"[A-Z]{2,}-[A-Z0-9]+$")
+
+
+def _strip_heading_markup(text: str) -> str:
+    """Remove heading content whose spelling must be preserved verbatim."""
+    text = re.sub(r"(`+)[^`\n]*?\1", "", text)
+    text = re.sub(
+        r"!?\[[^\]\n]*\](?:\([^\)\n]*\)|\[[^\]\n]*\])?", "", text
+    )
+    return re.sub(r"<[^>\n]+>", "", text)
+
+
+def _is_sentence_style_heading(text: str) -> bool:
+    """Recognize question-form and conservatively identifiable full sentences."""
+    visible = _strip_heading_markup(text).strip()
+    if re.search(r"[.?!](?:[\"')\]}*_]+)?$", visible):
+        return True
+    words = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", visible)
+    if not words:
+        return False
+    lowered = [word.lower() for word in words]
+    return lowered[0] in _QUESTION_OPENERS or any(
+        word in _FINITE_AUXILIARIES for word in lowered
+    )
+
+
+def _token_cannot_carry_case(token: str) -> bool:
+    """Return True for identifiers whose spelling title case must not alter."""
+    return (
+        token[0].isdigit()
+        or bool(_VERSION_RE.fullmatch(token))
+        or bool(_UPPER_ID_RE.fullmatch(token))
+        or token.startswith(".")
+        or "/" in token
+        or "\\" in token
+        or "_" in token
+        or bool(_FILE_NAME_RE.fullmatch(token))
+    )
 
 
 def _rule_g(text: str) -> list[Violation]:
@@ -224,37 +347,39 @@ def _rule_g(text: str) -> list[Violation]:
         heading_text = m.group(2).strip()
         if not heading_text:
             continue
-        # Strip inline code spans and links when evaluating case.
-        cleaned = re.sub(r"`[^`]*`", "", heading_text)
-        cleaned = re.sub(r"\[([^\]]*)\]\([^\)]*\)", r"\1", cleaned)
-        # Remove punctuation that isn't a word boundary (hyphens kept).
-        tokens = re.findall(r"[A-Za-z][A-Za-z0-9'/-]*", cleaned)
+        if _is_sentence_style_heading(heading_text):
+            continue
+        cleaned = _strip_heading_markup(heading_text)
+        tokens = [
+            token for token in _HEADING_TOKEN_RE.findall(cleaned)
+            if any(char.isalpha() for char in token)
+        ]
         if not tokens:
             continue
         problem: list[str] = []
         for idx, tok in enumerate(tokens):
-            if "-" in tok:
-                # Hyphenated compound: capitalize each sub-token.
-                parts = tok.split("-")
-                for sub in parts:
-                    if sub and not _is_titlecased(sub, is_first=(idx == 0 and sub == parts[0]), is_lc=False):
-                        problem.append(tok)
-                        break
+            if _token_cannot_carry_case(tok):
                 continue
             is_first = (idx == 0)
             is_last = (idx == len(tokens) - 1)
-            should_be_lc = tok.lower() in _LC_WORDS
-            if is_first or is_last:
-                # Always capitalize the first and last word.
-                if not _is_titlecased(tok, is_first=True, is_lc=False):
+            parts = tok.split("-")
+            for part_idx, part in enumerate(parts):
+                if not part or _token_cannot_carry_case(part):
+                    continue
+                part_is_first = is_first and part_idx == 0
+                part_is_last = is_last and part_idx == len(parts) - 1
+                should_be_lc = (
+                    part.lower() in _LC_WORDS
+                    and not part_is_first
+                    and not part_is_last
+                )
+                if should_be_lc:
+                    valid = part == part.lower()
+                else:
+                    valid = _is_titlecased(part)
+                if not valid:
                     problem.append(tok)
-                continue
-            if should_be_lc:
-                if tok != tok.lower():
-                    problem.append(tok)
-            else:
-                if not _is_titlecased(tok, is_first=False, is_lc=False):
-                    problem.append(tok)
+                    break
         if problem:
             out.append(
                 Violation(
@@ -268,22 +393,22 @@ def _rule_g(text: str) -> list[Violation]:
     return out
 
 
-def _is_titlecased(word: str, is_first: bool, is_lc: bool) -> bool:
-    """Return True if ``word`` is correctly cased for its role."""
+def _is_titlecased(word: str) -> bool:
+    """Return True if ``word`` begins with an uppercase letter."""
     if not word:
         return True
-    if is_lc and not is_first:
-        return word == word.lower()
     # Capitalized: first letter upper, rest may be mixed (acronyms, "RULES.md", etc.)
-    return word[0].isupper() or word[0].isdigit()
+    return word[0].isupper()
 
 
 # ---------- RULE-I contractions ---------------------------------------------
 
 
-# Common contractions that RULE-I flags in formal prose.
+# Ambiguous 's and 'd endings require closed host-word lists.
 _CONTRACTION_RE = re.compile(
-    r"\b(?:[A-Za-z]+'(?:s|t|re|ll|d|ve|m)|it's|don't|won't|can't|shan't|isn't|aren't|wasn't|weren't|I'm)\b",
+    r"\b(?:(?:it|that|he|she|there|here|what|who|where|when|how|let)'s|"
+    r"(?:i|you|he|she|it|we|they|that|who|what|which|why|there|where|how)'d|"
+    r"[A-Za-z]+n't|[A-Za-z]+'(?:re|ll|ve|m))\b",
     re.IGNORECASE,
 )
 
@@ -298,10 +423,6 @@ def _rule_i(text: str) -> list[Violation]:
         for m in _CONTRACTION_RE.finditer(line):
             if _inside_inline_code(line, m.start()):
                 continue
-            # Skip possessives like "Strunk & White's" (proper-noun possessive) by
-            # looking at the preceding token; we treat these as contractions too
-            # per RULE-I's strict reading, but we can exempt single-letter 'd/'s
-            # after proper names if needed. Keep strict for now.
             out.append(
                 Violation(
                     rule="RULE-I",
@@ -391,25 +512,36 @@ _CLICHE_PHRASES = [
     "next-generation",
     "next generation",
 ]
+_CLICHE_PATTERNS = tuple(
+    (
+        phrase,
+        re.compile(
+            r"(?<![A-Za-z0-9_])" + re.escape(phrase) + r"(?![A-Za-z0-9_])",
+            re.IGNORECASE,
+        ),
+    )
+    for phrase in _CLICHE_PHRASES
+)
 
 
 def _rule_05(text: str) -> list[Violation]:
     """Flag cliché phrases (small conservative list)."""
     out: list[Violation] = []
     lines_all = text.splitlines()
-    lowered = text.lower()
-    for phrase in _CLICHE_PHRASES:
-        p_low = phrase.lower()
-        start = 0
-        while True:
-            idx = lowered.find(p_low, start)
-            if idx == -1:
-                break
-            line_no = text.count("\n", 0, idx) + 1
-            line_start = text.rfind("\n", 0, idx) + 1
+    spans = _line_spans(text)
+    starts = [start for start, _ in spans]
+    for phrase, pattern in _CLICHE_PATTERNS:
+        for match in pattern.finditer(text):
+            idx = match.start()
+            # Locate the match against the same CR/LF/CRLF line model that
+            # produced ``lines_all``. Counting only "\n" here would put a match
+            # after a bare CR on the wrong line, and disagree with the fence
+            # mask indexed just below.
+            line_no = bisect.bisect_right(starts, idx)
+            line_start, line_end = spans[line_no - 1]
             col = idx - line_start + 1
             if not _inside_code_fence(lines_all, line_no - 1):
-                line_text = text[line_start : text.find("\n", line_start) if text.find("\n", line_start) != -1 else len(text)]
+                line_text = text[line_start:line_end]
                 if not _inside_inline_code(line_text, col - 1):
                     out.append(
                         Violation(
@@ -420,14 +552,14 @@ def _rule_05(text: str) -> list[Violation]:
                             detail=f"cliché phrase '{phrase}'",
                         )
                     )
-            start = idx + len(p_low)
     return out
 
 
 # ---------- RULE-06 avoidable jargon ----------------------------------------
-# The 45-word banned AI-tell list from .agent-config AGENTS.md Writing Defaults
-# plus a few Orwell 1946 Rule 5 instances. This is both the RULE-06 jargon
-# surface AND the "banned AI-tell list" detector — one regex.
+# This 54-entry list combines the 45-word banned AI-tell list from
+# .agent-config AGENTS.md Writing Defaults with 9 forms of 3 RULE-06
+# BAD-example callouts. It is both the RULE-06 jargon surface and the
+# "banned AI-tell list" detector.
 
 _JARGON_WORDS = [
     # 45-word banned AI-tell list
@@ -439,7 +571,7 @@ _JARGON_WORDS = [
     "garner", "undermine", "gauge", "facet", "bolster", "groundbreaking",
     "game-changing", "reimagine", "turnkey", "intricate", "trailblazing",
     "unprecedented",
-    # Additional jargon specifically called out in RULE-06 BAD examples
+    # 9 forms of 3 jargon terms called out in RULE-06 BAD examples
     "leverages", "leveraging", "leverage",
     "utilize", "utilizes", "utilizing",
     "facilitate", "facilitates", "facilitating",
@@ -452,7 +584,7 @@ _JARGON_RE = re.compile(
 
 
 def _rule_06(text: str) -> list[Violation]:
-    """Flag avoidable jargon words (45-word banned list + Orwell-Rule-5 words)."""
+    """Flag the 54 avoidable-jargon and AI-tell entries."""
     out: list[Violation] = []
     lines_all = text.splitlines()
     for line_no, _col0, line in _iter_lines(text):

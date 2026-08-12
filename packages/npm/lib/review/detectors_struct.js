@@ -41,7 +41,7 @@ function excerpt(textSlice, span, width = 120) {
 }
 
 function fenceMask(text) {
-  const lines = text.split('\n');
+  const lines = text.split(/\r\n|[\n\r]/);
   let inside = false;
   const mask = [];
   for (const line of lines) {
@@ -56,7 +56,7 @@ function fenceMask(text) {
 }
 
 function paragraphs(text) {
-  const lines = text.split('\n');
+  const lines = text.split(/\r\n|[\n\r]/);
   const fence = fenceMask(text);
   const out = [];
   let curStart = null;
@@ -100,41 +100,124 @@ function firstWord(sentence) {
 
 // ---------- RULE-A bullet overuse ------------------------------------------
 
-const BULLET_RE = /^\s*(?:[*+-]|\d+\.)\s+(.*)$/;
+// Groups: (1) leading indentation, (2) marker, (3) item content. The indent is
+// captured so a nested list is not collected into its parent's group.
+const BULLET_RE = /^(\s*)([*+-]|\d+\.)\s+(.*)$/;
 
+// Width of `indent` in columns, expanding tabs to the next tab stop. Comparing
+// raw character length would call one space and one tab the same depth, and
+// four spaces and one tab different depths, so a list's nesting would depend on
+// which whitespace the author typed.
+function indentColumns(indent, tabStop = 4) {
+  let width = 0;
+  for (const ch of indent) {
+    width += ch === '\t' ? tabStop - (width % tabStop) : 1;
+  }
+  return width;
+}
+
+// Coordinators, subordinators and relative pronouns. An item opening with one
+// of these points back at something the bullet was severed from. Bare
+// prepositions are deliberately absent: `For Linux, use apt` heads a genuine
+// per-platform enumeration, so treating `for`/`to`/`with`/`from` as evidence
+// flags exactly the lists RULE-A's directive permits.
+const CONNECTIVE_OPENERS = new Set(`
+  and but or nor so yet because therefore thus hence however although though
+  while whereas since unless until then also moreover furthermore
+  additionally rather which who whom whose that
+`.trim().split(/\s+/));
+// A repeated template is only evidence when it is an actual clause opening.
+// Keying on the first two words of anything flags `Run the migration` /
+// `Run the tests`, which is the directive's own checklist case.
+const CLAUSE_SUBJECTS = new Set(['i', 'we', 'you', 'he', 'she', 'it', 'they', 'this', 'that', 'these', 'those']);
+const COPULAS = new Set(['am', 'are', 'is', 'was', 'were']);
+
+// Lowercase word tokens of a list item, punctuation and emphasis stripped.
+function itemWords(content) {
+  return content.split(/\s+/).map((w) => w.replace(/^[.,;:!?()[\]`"'*_~]+|[.,;:!?()[\]`"'*_~]+$/g, '').toLowerCase());
+}
+
+// Name the shape that marks the items as one sentence split across bullets, as
+// {strength, reason}; null when the list reads as a genuine enumeration. A
+// `strong` signal is self-sufficient; a `weak` one needs every item short too.
+function readsAsShreddedProse(items) {
+  const tokenized = items.map((it) => itemWords(it.content).filter((w) => w));
+  for (const words of tokenized) {
+    // A bare `And` / `But` / `Or` is a label, not connective tissue. Only a
+    // connective that actually leads into something continues a sentence.
+    if (words.length > 1 && CONNECTIVE_OPENERS.has(words[0])) {
+      return { strength: 'strong', reason: `an item opens with the connective '${words[0]}'` };
+    }
+  }
+  // `Per minute` / `Per user` trailing `Free tier` are fragments continuing a
+  // stem. Two boundaries keep this from swallowing genuine enumerations: a list
+  // where *every* item leads with `per` is a real enumeration, and so is one
+  // where only a single item does not (`Global` / `Per user` / `Per project`).
+  // Fragments need at least two items to continue from.
+  const perCount = tokenized.filter((words) => words.length && words[0] === 'per').length;
+  if (perCount > 1 && perCount < tokenized.length - 1) {
+    return { strength: 'strong', reason: "later items are repeated 'per' fragments" };
+  }
+  const templates = new Map();
+  for (const words of tokenized) {
+    if (words.length < 2 || !CLAUSE_SUBJECTS.has(words[0]) || !COPULAS.has(words[1])) continue;
+    const key = `${words[0]} ${words[1]}`;
+    const seen = (templates.get(key) || 0) + 1;
+    templates.set(key, seen);
+    if (seen >= 2) return { strength: 'weak', reason: `items repeat the clause template '${key}'` };
+  }
+  return null;
+}
+
+/**
+ * Flag short lists that read as fragmented prose rather than enumeration.
+ *
+ * The marker is not evidence either way, and shortness is not evidence on its
+ * own either -- a checklist of terse imperative steps is short *and* genuine.
+ * The test is RULE-A's own directive: "bullets are sentence shards with
+ * connective tissue stripped", graded by how much each shape proves alone. A
+ * strong signal (an opening coordinator/subordinator/relative pronoun, or some
+ * but not all items leading with `Per`) fires regardless of item length. A weak
+ * one (a repeated subject-and-copula opening) needs every item short too.
+ * Imperative checklist steps, preposition-led enumerations and short
+ * independent labels match neither and stay clean.
+ */
 function ruleA(text) {
   const out = [];
-  const lines = text.split('\n');
+  const lines = text.split(/\r\n|[\n\r]/);
   const fence = fenceMask(text);
   let i = 0;
   while (i < lines.length) {
     if (fence[i]) { i++; continue; }
-    if (!BULLET_RE.test(lines[i])) { i++; continue; }
+    const head = BULLET_RE.exec(lines[i]);
+    if (!head) { i++; continue; }
+    // Collect the siblings of this bullet. Ignoring indentation flattens a
+    // nested list into its parent, so `- Rate limits:` plus two indented
+    // `- Per …` children reads as one three-item group that no author wrote.
+    // Deeper lines are skipped rather than ending the group, so a parent list
+    // that resumes after a nested block stays one list.
     const groupStart = i + 1;
+    const groupIndent = indentColumns(head[1]);
     const items = [];
     while (i < lines.length && !fence[i]) {
       const m = BULLET_RE.exec(lines[i]);
       if (!m) break;
-      items.push({ lineNo: i + 1, content: m[1].trim() });
+      const indent = indentColumns(m[1]);
+      if (indent > groupIndent) { i++; continue; } // a child, not a sibling
+      if (indent < groupIndent) break;
+      items.push({ lineNo: i + 1, content: m[3].trim() });
       i++;
     }
     const n = items.length;
     const shortItems = items.filter((it) => it.content.split(/\s+/).length <= 8).length;
-    if (n <= 2) {
+    const signal = n >= 3 ? readsAsShreddedProse(items) : null;
+    if (signal !== null && (signal.strength === 'strong' || shortItems === n)) {
       out.push({
         rule: 'RULE-A',
         line: groupStart,
         column: 1,
         excerpt: excerpt(lines[groupStart - 1], [0, lines[groupStart - 1].length]),
-        detail: `list has only ${n} item(s); consider prose`,
-      });
-    } else if (shortItems === n && n >= 3) {
-      out.push({
-        rule: 'RULE-A',
-        line: groupStart,
-        column: 1,
-        excerpt: excerpt(lines[groupStart - 1], [0, lines[groupStart - 1].length]),
-        detail: `list has ${n} items all ≤ 8 words; consider prose`,
+        detail: `list has ${n} items and ${signal.reason}; consider prose`,
       });
     }
   }

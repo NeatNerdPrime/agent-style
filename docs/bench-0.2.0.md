@@ -31,7 +31,7 @@
 - Date: 2026-04-21T03:06:54Z
 - agent-style version: 0.2.0
 
-## Per-task per-rule delta (mechanical + structural; semantic excluded)
+## Per-task per-rule delta (mechanical only; structural and semantic excluded)
 
 | Task | Baseline total | Treatment total | Delta | Dominant rule |
 |---|---|---|---|---|
@@ -70,7 +70,7 @@ _Sanity benchmark; numbers are directional, not a claim of statistical significa
 - Date: 2026-04-21T03:07:02Z
 - agent-style version: 0.2.0
 
-## Per-task per-rule delta (mechanical + structural; semantic excluded)
+## Per-task per-rule delta (mechanical only; structural and semantic excluded)
 
 | Task | Baseline total | Treatment total | Delta | Dominant rule |
 |---|---|---|---|---|

@@ -12,7 +12,7 @@ Post-hoc review for prose an AI agent has already written. The generation-time r
 
 | Shape | Behavior |
 | --- | --- |
-| `/style-review FILE` | Audit FILE against all 21 rules. Show per-rule scorecard. Ask the user: "produce a polished draft at FILE.reviewed.md?" On yes, write revised file and print diff. |
+| `/style-review FILE` | Audit FILE and show a 21-row per-rule scorecard. 18 rules are actually checked; RULE-02, RULE-09 and RULE-10 have no detector yet and report `skipped`. Ask the user: "produce a polished draft at FILE.reviewed.md?" On yes, write revised file and print diff. |
 | `/style-review A.md B.md` | A/B compare. Emit per-rule delta. No polish, no ask. Used for benchmarking. |
 
 Mode is inferred from argument count. No flags.
@@ -54,4 +54,4 @@ The revision prompt enforces these in its template (see `references/revision-pro
 
 When asked "is style-review active?", reply on one line using this exact format:
 
-`style-review active: audit 21 rules (deterministic: RULE-B, D, G, I, 12, 05, 06, A, C, E; semantic via host: RULE-01, 03, 04, 07, 08, 11, F, H); workflow at skills/style-review/SKILL.md.`
+`style-review active: 21-row scorecard, 18 rules checked (deterministic: RULE-B, D, G, I, 12, 05, 06, A, C, E; semantic via host: RULE-01, 03, 04, 07, 08, 11, F, H; skipped: RULE-02, 09, 10); workflow at skills/style-review/SKILL.md.`

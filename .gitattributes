@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT
+
+# Normalize line endings in the repository so a Windows checkout, a Linux
+# checkout, and a CI runner all present identical bytes to the detectors.
+#
+# Without this, `core.autocrlf=true` gives Windows clones CRLF working files
+# while the maintainer's older checkout keeps LF. The review engine then
+# behaves differently per platform on the same committed content, which is
+# how the Node RULE-A line-splitting defect stayed invisible locally while
+# breaking every fresh Windows clone.
+#
+# This governs the repository only. User prose passed to `agent-style review`
+# can still arrive with any line ending, so the detectors must stay
+# line-ending agnostic on their own.
+
+* text=auto
+
+*.md    text eol=lf
+*.py    text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+*.toml  text eol=lf
+*.mdc   text eol=lf
+*.txt   text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.ico   binary

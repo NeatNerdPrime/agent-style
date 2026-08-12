@@ -39,7 +39,14 @@ function audit(filePath, opts = {}) {
   const skillHost = opts.skillHost || false;
 
   const rules = loadRules({ projectRoot });
-  const text = fs.readFileSync(filePath, 'utf8');
+  // Python's reader is `open(path, encoding="utf-8")`, whose default
+  // newline=None applies universal-newline translation, so every detector on
+  // that side sees LF regardless of how the file is stored. readFileSync does
+  // no such translation. Normalising here is what makes the two engines agree
+  // on line and column numbers for a CRLF or bare-CR file; without it the
+  // divergence has to be re-fixed in every detector that does offset
+  // arithmetic. Detectors still handle CR themselves for direct-text callers.
+  const text = fs.readFileSync(filePath, 'utf8').replace(/\r\n|\r/g, '\n');
   const ruleResults = [];
   let total = 0;
 

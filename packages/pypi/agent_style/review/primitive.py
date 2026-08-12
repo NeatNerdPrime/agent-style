@@ -184,7 +184,8 @@ def compare(
 
 
 # ---------- Rule classification ---------------------------------------------
-# Per Rev 3 detector matrix in PLAN-style-review.md. Each rule can have
+# Per the detector matrix in skills/style-review/references/rule-detectors.md.
+# (The Rev 3 PLAN this once cited is not in the repository.) Each rule can have
 # multiple buckets; both run for an audit and their counts aggregate.
 
 _CLASSIFICATION: dict[str, set[str]] = {
