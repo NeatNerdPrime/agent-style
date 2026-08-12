@@ -95,9 +95,23 @@ See [`RULES.md`](RULES.md) for the full per-rule blocks with BAD/GOOD examples, 
 
 ![agent-style v0.3.0 sanity bench across Claude Opus 4.7, OpenAI GPT-5.4 via Codex CLI, and Gemini 3 Flash: 105 to 58 (-45%), 51 to 28 (-45%), and 79 to 14 (-82%) AI-tell violations across 10 fixed prose tasks, per-rule breakdown, directional-not-statsig caveat](docs/bench.png)
 
-Sanity bench on 10 fixed prose tasks (2 PR descriptions, 1 design-doc section, 1 commit message, 4 paper sections, 1 product description, 1 NSF-style specific aim), 2 generations per condition, flagship models drafting with `agent-style` loaded at generation time vs not. Three models shown: **Claude Opus 4.7 dropped 45% (105 → 58 violations); OpenAI GPT-5.4 via Codex CLI dropped 45% (51 → 28); Gemini 3 Flash dropped 82% (79 → 14).** The GitHub Copilot CLI runner was tested but excluded from the figure because its `-p` programmatic mode does not load instruction files (+3% noise; see [`CHANGELOG.md`](CHANGELOG.md) Notes). See [`docs/bench-0.3.0.md`](docs/bench-0.3.0.md) for the full scorecard across all 4 runners plus per-runner drafts under [`docs/bench-0.3.0-drafts/`](docs/bench-0.3.0-drafts/), and [`RELEASING.md`](RELEASING.md) "Bench (Local Only)" for reproduction steps.
+Sanity bench on 10 fixed prose tasks, 2 generations per condition. The task set is 2 PR descriptions, 1 design-doc section, 1 commit message, 4 paper sections, 1 product description, and 1 NSF-style specific aim. Flagship models drafted each one twice: once with `agent-style` loaded at generation time, once without.
 
-Numbers are directional, not statsig: 10 tasks × 2 generations × 2 conditions = 40 calls per runner. The takeaway is that the ruleset reduces mechanical AI-tell density across every frontier family where the instruction file actually reaches the model's context; the exact size of the drop varies with each model's baseline (heavier in models that emit more long sentences / em-dashes by default, smaller or zero in already-clean models).
+Three models are eligible for a treatment comparison. Claude Opus 4.7 dropped **47%** (91 → 48 violations). OpenAI GPT-5.4 via Codex CLI dropped **47%** (49 → 26). Gemini 3 Flash dropped **84%** (73 → 12). GitHub Copilot CLI reported +2% (59 → 60). Treat that fourth number as a noise control, not a fourth treatment result. In the April 2026 setup, `copilot -p` showed no measurable effect from the installed instruction file. That archived result is specific to the version and setup of the day. Current Copilot CLI documentation describes repository instruction discovery, so it says nothing about present-day `-p` behavior.
+
+### What the bench measures, and what it does not
+
+Scoring runs `agent-style review --mechanical-only`. These numbers therefore cover **7 of the 21 rules**: RULE-05, 06, 12, B, D, G and I. That flag also disabled the structural detectors, so RULE-A, C and E contributed nothing, and the semantic rules need a model host the bench never ran.
+
+Three of those seven carry almost all of the movement: sentence length (RULE-12), em and en dashes (RULE-B), and the jargon word list (RULE-06). Both figures below pool the Copilot control with the three treatment-eligible arms. Under the original scoring shown in the figure, those three account for a net 120 of the pooled 133-violation reduction, or 90%. The corrected scoring reported here gives 119 of 126 by the same calculation, or 94%. On the Codex arm, sentence length alone is the entire delta.
+
+Both **critical**-severity rules are measured by nothing here. RULE-01 (curse of knowledge) and RULE-H (citation discipline) are semantic-only. No bench in this repository reports on the two rules the ruleset itself ranks highest. Read these percentages as mechanical AI-tell density on a Markdown surface. They are not evidence about argument quality, clarity for a stated audience, or sourcing.
+
+Numbers are directional and carry no claim of statistical significance. Each runner saw 10 tasks × 2 generations × 2 conditions, or 40 calls. Where the instruction file reaches the model's context, mechanical AI-tell density falls. How far it falls tracks each model's baseline, and is larger in models that emit long sentences and em-dashes by default.
+
+Figures above come from [`docs/bench-0.3.0-rescored.md`](docs/bench-0.3.0-rescored.md). It re-scores the same 160 preserved drafts with the repaired detectors, reporting the original and corrected value side by side. Six divergences between a rule's directive and its detector were repaired, which moved the pooled delta from -133 to -126. That correction is small next to the scope limits above.
+
+Original scorecards remain at [`docs/bench-0.3.0.md`](docs/bench-0.3.0.md) and the preserved drafts at [`docs/bench-0.3.0-drafts/`](docs/bench-0.3.0-drafts/). Reproduction steps live in [`RELEASING.md`](RELEASING.md) under "Bench (Local Only)". The figure shows the original v0.3.0 scoring; the corrected re-score is linked above, and no new model generation was run for this release.
 
 ## Who It Is For
 
@@ -116,7 +130,7 @@ Install the CLI once; then pick the paths you want.
 ```bash
 pip install agent-style                              # Python users
 # or: npm install -g agent-style                     # Node users
-# or: npx --yes agent-style@0.3.6 <subcommand>       # no install needed
+# or: npx --yes agent-style@0.4.0 <subcommand>       # no install needed
 ```
 
 ### 1. Soft Enforcement — rules at generation time
@@ -205,7 +219,7 @@ For `print-only` and `multi-file-required`, the JSON output carries `manual_step
 </details>
 
 <details>
-<summary><b>Per-surface install table (v0.3.6 primary set)</b></summary>
+<summary><b>Per-surface install table (v0.4.0 primary set)</b></summary>
 <br>
 
 | Tool | install_mode | Target path |
@@ -232,7 +246,7 @@ Amazon Q Developer, JetBrains AI Assistant, Windsurf, Ollama, Replit, OpenCode, 
 Skip the package install; pin to a specific release so adapters and `RULES.md` stay consistent:
 
 ```bash
-AGENT_STYLE_REF=v0.3.6
+AGENT_STYLE_REF=v0.4.0
 mkdir -p .agent-style
 curl -fsSLo .agent-style/RULES.md       "https://raw.githubusercontent.com/yzhao062/agent-style/${AGENT_STYLE_REF}/RULES.md"
 curl -fsSLo .agent-style/claude-code.md "https://raw.githubusercontent.com/yzhao062/agent-style/${AGENT_STYLE_REF}/agents/claude-code.md"
@@ -325,7 +339,7 @@ After running `agent-style enable <tool>`, ask your agent:
 
 Expected reply:
 
-> agent-style v0.3.6 active: 21 rules (RULE-01..12 canonical + RULE-A..I field-observed); full bodies at .agent-style/RULES.md.
+> agent-style v0.4.0 active: 21 rules (RULE-01..12 canonical + RULE-A..I field-observed); full bodies at .agent-style/RULES.md.
 
 For `style-review` specifically, ask:
 
@@ -358,7 +372,7 @@ npx anywhere-agents        # Node.js path
 
 Opt out by adding `rule_packs: []` to `agent-config.yaml` at your project root; pin to a specific ref or swap for a fork via `rule_packs: - name: agent-style\n    ref: <tag>`. See [anywhere-agents rule-pack composition docs](https://github.com/yzhao062/anywhere-agents/blob/main/docs/rule-pack-composition.md) for the full contract.
 
-### v0.3.6+ Roadmap
+### v0.4.0+ Roadmap
 
 Planned CLI additions: `agent-style update` (refresh installed adapters to latest), `agent-style override <RULE-ID> disable` (per-rule opt-out), `agent-style clean` (one-command uninstall), `.agent-style/config.toml` (project-level config), RULE-02 / 07 / 09 / 10 structural detectors filled in, and filled adapters for the planned-adapter set above (v1.1). Track progress in [`CHANGELOG.md`](CHANGELOG.md).
 

@@ -75,13 +75,18 @@ bash scripts/verify-install.sh --cli-parity  # Python vs Node JSON diff across 5
 
 > **Docs-only git tag convention.** Some releases (for example `v0.3.2`, `v0.3.3`) are intentionally git-only — a stable ref for external pinning (e.g. `anywhere-agents` fetches `docs/rule-pack.md` at a pinned ref) without a PyPI / npm package bump. When publishing the next proper release, **skip over any docs-only tag numbers**. Do NOT publish `X.Y.Z` to PyPI / npm if a git tag `vX.Y.Z` already exists as a docs-only tag — the registry would retroactively advertise new package content under a ref consumers have already pinned as unchanging. Check `git tag --list --sort=-v:refname` and verify each recent tag against the CHANGELOG's "Docs-only tag" notes before choosing the next version. The CHANGELOG's top-of-file "Version distribution" block is the authoritative record of which git tags were published to PyPI / npm and which were git-only.
 
-Only **three files** hold the release version:
+**Three files** are the authoritative package version:
 
 1. `packages/pypi/pyproject.toml` -> `project.version`
 2. `packages/pypi/agent_style/__init__.py` -> `__version__`
 3. `packages/npm/package.json` -> `version`
 
-The three must hold the same final shared version `X.Y.Z` before tag. They may be temporarily ecosystem-specific during rc rehearsal (see next section).
+**Two more must mirror them**, and were missed for two releases because this list said "only three":
+
+4. `packages/pypi/agent_style/data/tools.json` -> `agent_style_version`
+5. `packages/npm/data/tools.json` -> `agent_style_version`
+
+All five must hold the same final shared version `X.Y.Z` before tag. The first three may be temporarily ecosystem-specific during rc rehearsal (see next section); the mirrors track the final shared version only. `bump-version.py` refuses to run when any of the five has drifted off the old version, because exact-string replacement would otherwise skip the stale one and carry the drift forward silently.
 
 Also: add a `## [X.Y.Z] — YYYY-MM-DD` section to `CHANGELOG.md`, move contents from `[Unreleased]`, and update the compare-link block at the bottom so `[X.Y.Z]` resolves and `[Unreleased]` compares against the new tag.
 
@@ -314,9 +319,19 @@ the README figure when a major/minor release warrants it.
 
 ### Cadence
 
-Run before tagging a major or minor release (v0.3.0, v0.4.0, v1.0.0).
-Skip on patch releases (v0.2.1, v0.2.2) unless the patch touches bench
-code itself.
+Run a fresh model-generation bench before tagging a major or minor release
+that changes the rule payload, the generation adapters, the task set, or
+runner behavior. Skip on patch releases (v0.2.1, v0.2.2) unless the patch
+touches bench code itself.
+
+**Detector-only exception.** A release that changes only deterministic scoring
+must NOT run a fresh generation bench. New generations would confound the
+detector change with generation variance, so the delta would no longer measure
+what the release changed. Such a release instead re-scores the latest preserved
+drafts, requires two matching replay passes, and commits the corrected report.
+It may retain the historical figure only when the README labels the figure's
+scoring version and links the corrected report. `scripts/bench/rescore.py`
+implements this path; v0.4.0 is the first release to take it.
 
 ### Maintainer machine prerequisites
 

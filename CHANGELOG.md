@@ -6,7 +6,42 @@ All notable changes to *The Elements of Agent Style* are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semantic Versioning: [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html).
 
-> **Version distribution (as of 2026-04-28).** PyPI and npm now distribute **0.3.4**. Git tags **v0.3.2** and **v0.3.3** remain *docs-only* additions (`docs/rule-pack.md` published as the `anywhere-agents` rule-pack pin target, and README Use option 3 cross-reference); they are intentionally NOT a PyPI / npm publish target, and the package version files skipped them. v0.3.4 is the first registry publish since v0.3.1. Future docs-only tags should follow the same convention; the next package release should bump to v0.3.5 or later, never reuse a docs-only ref. See `RELEASING.md` for the docs-only tag convention.
+> **Version distribution for the v0.4.0 release.** The last shared PyPI and npm release before this one is **0.3.6**; this release publishes **0.4.0** to both registries. Git tags **v0.3.2** and **v0.3.3** remain *docs-only* additions (`docs/rule-pack.md` published as the `anywhere-agents` rule-pack pin target, and README Use option 3 cross-reference); they were never a PyPI or npm publish target, and the package version files skipped them. No package release may reuse a docs-only ref. See `RELEASING.md` for the docs-only tag convention. This banner is the authoritative record `RELEASING.md` consults when deciding what may be published, so it is updated on every release.
+
+## [Unreleased]
+
+## [0.4.0] — 2026-08-11
+
+Minor rather than patch: six detector-backed rules (RULE-05, RULE-A, RULE-B, RULE-D, RULE-G and RULE-I) now report differently for the same input, and the Node engine's file-reading semantics changed. RULE-A is structural; the other five are mechanical. Any consumer comparing violation counts across versions will see movement.
+
+### Fixed
+
+- **RULE-05 no longer suppresses a cliché attached by a hyphen.** The boundary class was `[A-Za-z0-9_-]`, which treated a following hyphen as part of the word, so `paradigm shift-based` and `state-of-the-art-system` went unreported. Both boundaries are now `[A-Za-z0-9_]`. The exclusions the rule intends are unaffected: `a novelty-detection` and `novel methodology` still do not fire, because a word character, unlike a hyphen, does end the match.
+- **RULE-A judges list meaning instead of list syntax.** The detector exempted every ordered list, so a numbered causal chain (`1. Because retrieval is hard` / `2. Therefore we add reranking`) was invisible while the same text with dashes fired. RULE-A's directive never privileges a marker. The exemption is gone, and shortness alone is no longer evidence either, because the directive names checklist steps as a genuine list. A list of three or more items is flagged when it carries a **strong** signal at any item length (an item opening with a coordinator, subordinator or relative pronoun, or at least two items leading with `Per` while at least two do not) or a **weak** one when every item is also short (two or more items repeating a subject-and-copula opening). Imperative checklists, preposition-led enumerations such as `For Linux, use apt`, nested child lists, and short independent labels stay clean.
+- **RULE-B now exempts paired-name en dashes.** Numeric ranges were already exempt, but v0.3.6 still reported directive-approved forms such as `Cauchy–Schwarz`. The detector now exempts an en dash between two adjacent capitalized tokens. That test is capitalization adjacency rather than name recognition, which is recorded in Notes.
+- **RULE-D now applies one transition-opener allowance per detected Markdown block.** v0.3.6 reported every recognized line-initial opener and recognized only four of the six directive-listed forms. The detector now recognizes all six at sentence starts, permits the first within each block, and resets at blank lines, headings, leading-pipe table rows, thematic breaks, list items, ordinary fences, and markup-only lines. The non-fence boundaries are also recognized after blockquote markers; a fence inside a blockquote is a known limitation.
+- **RULE-G now follows the directive's title-case scope.** It exempts conservatively recognized sentence-style headings and spelling-sensitive code, link, HTML, version, identifier, path, and filename tokens; it uses RULE-G's stated minor-word set; and it checks title-case boundaries inside hyphenated compounds. The finite-auxiliary heuristic and the link-label removal remain recorded limitations.
+- **RULE-I recognises the full closed `'d` host set.** `why'd`, `there'd`, `where'd` and `how'd` were missing.
+- **Python and Node now agree on any file, whatever its line endings.** Python reads with `open(path, encoding="utf-8")`, whose default `newline=None` applies universal-newline translation, so every Python detector has always seen LF. `fs.readFileSync` does not translate. The Node reader now normalises, which is the actual cause of a divergence that had been visible as a Node-only defect: on a CRLF file, a Windows reader silently got wrong RULE-A results. The detectors were additionally given a shared CR/LF/CRLF line model so a direct-text caller is correct too, and RULE-05 now locates matches with that model rather than counting `\n`.
+- **`scripts/bump-version.py` no longer rewrites release history.** `RELEASING.md` narrates past releases by version number and was not on the skip list, so a bump silently renamed the release that a recorded packaging incident happened in.
+
+### Added
+
+- **`docs/bench-0.3.0-rescored.md`.** The 160 committed drafts re-scored with the repaired detectors, giving the original and corrected value side by side per rule and per runner. Repairing the instrument moves the pooled delta from -133 to -126.
+- **`scripts/bench/rescore.py` and a `--drafts PATH` replay mode in `scripts/bench/run.sh`.** Replay re-scores saved drafts without calling any model and reuses the original scoring invocation, so old and new numbers are comparable by construction. It refuses to publish against modified drafts and records the drafts tree hash in the report. An empty `--drafts` value fails closed rather than falling through to generation.
+- **Exact-object regression tests in both runtimes.** The fixture tests compared per-rule counts only, so a false positive and a false negative for the same rule cancelled out. The suites now assert complete violation objects, including `excerpt` and `detail`, and cover RULE-05 under LF, CRLF and bare CR through both the file path and the detector directly. Python goes from 16 tests to 46, Node from 15 to 45.
+- **A `unit-tests` CI job** on `ubuntu-latest` and `windows-latest` across Node 18 and 24, and a `.gitattributes` that normalises line endings in the repository. The Node RULE-A defect above reproduced only on CRLF checkouts, which no job ran.
+
+### Changed
+
+- **Every benchmark scorecard heading now says `mechanical only; structural and semantic excluded`.** The harness has always passed `--mechanical-only`, so the structural detectors never contributed to a published number, but the generated heading claimed `mechanical + structural` in all eleven documents.
+- **README "Does It Work?" states the measurement's scope.** The published percentages cover 7 of the 21 rules. Three of those seven (sentence length, dashes, jargon list) account for a net 120 of the pooled 133-violation reduction under the original scoring, or 90%; under the corrected scoring the same all-arm calculation is 119 of 126, or 94%. Both critical-severity rules, RULE-01 and RULE-H, are measured by no bench in this repository. The GitHub Copilot arm is reported as a noise control rather than a fourth result, because `copilot -p` showed no measurable effect from the instruction file in the April 2026 setup; that archived result is version- and setup-specific and does not describe present-day behavior.
+- **`agent_style_version` in both bundled `tools.json` files** was still `0.2.0` while the three version files were current. The field is parsed but unused, so no behavior changes.
+
+### Notes
+
+- The re-score does not re-run any model. It re-scores preserved outputs, so it cannot speak to model drift, and the archived runs whose drafts are absent (`bench-0.2.0.md`, the v0.2.0 Gemini archive, and the three v0.3.0 archives) stay excluded from every total.
+- Known and tracked, not fixed here: the Python CLI emits CRLF on Windows, breaking the byte-identical canonical JSON claim; `\w` is Unicode-aware in Python and ASCII-only in JavaScript, so RULE-12 word counts diverge on accented prose and RULE-I misses the typographic apostrophe; RULE-G treats a finite auxiliary anywhere as proof of a sentence-style heading; RULE-B's paired-name test is capitalization adjacency; RULE-A does not see lists inside blockquotes or `1)` ordered markers; and RULE-12's sentence splitter does not break before Markdown emphasis.
 
 ## [0.3.6] — 2026-06-13
 
@@ -200,6 +235,8 @@ The v0.3.0 cycle turns the bench from a narrow, API-billable CI job into a full-
 
 ---
 
+[Unreleased]: https://github.com/yzhao062/agent-style/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/yzhao062/agent-style/compare/v0.3.6...v0.4.0
 [0.3.6]: https://github.com/yzhao062/agent-style/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/yzhao062/agent-style/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/yzhao062/agent-style/compare/v0.3.3...v0.3.4
