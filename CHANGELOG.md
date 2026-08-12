@@ -10,6 +10,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semantic Versi
 
 ## [Unreleased]
 
+### Fixed
+
+- **`real-agent-smoke` asserted a style-review handshake that v0.4.0 had already replaced.** The skill's self-verification sentence changed from `21 rules` to `21-row scorecard, 19 rules checked`, and both assertions in the `style-review-skill` job kept requiring the old substring. The static check passed regardless, because `21 rules` still appears in the skill's frontmatter description, so the only step that noticed was the live-model probe, and it noticed on the v0.4.0 tag with the package already on PyPI. Both token lists now name the current handshake. The four adapter jobs keep `21 rules` on purpose: an adapter loads all 21 rules, while the skill emits 21 scorecard rows and checks 19 of them.
+- **The handshake is pinned at push time instead of at release time.** `real-agent-smoke` runs on `release.published` and manual dispatch only, so nothing could catch this drift until the release existed. `packages/pypi/tests/test_handshake_parity.py` now asserts that the sentence reads identically in `skills/style-review/SKILL.md`, both packaged copies and the README, and that every literal the workflow asserts is a substring of that sentence. Deleting the workflow guard fails the test too. Verified against three seeded regressions: the pre-0.4.0 token list, a drifted npm copy, and a removed assertion.
+
 ## [0.4.0] — 2026-08-11
 
 Minor rather than patch: six detector-backed rules (RULE-05, RULE-A, RULE-B, RULE-D, RULE-G and RULE-I) now report differently for the same input, and the Node engine's file-reading semantics changed. RULE-A is structural; the other five are mechanical. Any consumer comparing violation counts across versions will see movement.

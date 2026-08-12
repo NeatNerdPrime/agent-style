@@ -94,6 +94,8 @@ Also: add a `## [X.Y.Z] — YYYY-MM-DD` section to `CHANGELOG.md`, move contents
 
 Rehearsal uses a **pre-release version**, not the final one, because registries are immutable: once `X.Y.Z` is uploaded anywhere, a packaging fix cannot reuse that version string without a bump. Rehearsal versions are ecosystem-specific because PyPI uses PEP 440 (`0.1.0rc1`) and npm uses SemVer (`0.1.0-rc.1`).
 
+> **`bump-version.py` drives neither direction of the rehearsal; use the targeted `sed` forms.** Entering rc state, it does not refuse, which is the trap: its patterns rewrite `vX.Y.Z` and `"X.Y.Z"` across every tracked `.md`, `.json` and `.toml`, so both `tools.json` mirrors and every adapter handshake string would take the rc suffix, and the mirrors are supposed to hold the final shared version the whole time. Leaving rc state, it refuses outright, because the drift check requires all five version files to carry the old string and the mirrors never left `X.Y.Z`. Reserve `bump-version.py` for the single move it is built for: all five files from one final shared version to the next.
+
 ```bash
 # Bump Python files only to 0.1.0rc1 (npm stays at 0.1.0 locally; or bump to 0.1.0-rc.1 if you want a matching npm local tarball test).
 sed -i 's/version = "0\.1\.0"/version = "0.1.0rc1"/' packages/pypi/pyproject.toml
@@ -139,7 +141,9 @@ If TestPyPI catches a packaging issue, fix it, bump to `0.1.0rc2` / `0.1.0-rc.2`
 ## Bump Back to Final Version; Final Local Checks
 
 ```bash
-# Restore all three files to final shared X.Y.Z.
+# Restore all three files to final shared X.Y.Z. Targeted sed, not
+# bump-version.py: it refuses while the mirrors still read X.Y.Z. See the
+# rehearsal section above.
 sed -i 's/version = "0\.1\.0rc[0-9]*"/version = "0.1.0"/' packages/pypi/pyproject.toml
 sed -i 's/__version__ = "0\.1\.0rc[0-9]*"/__version__ = "0.1.0"/' packages/pypi/agent_style/__init__.py
 sed -i 's/"version": "0\.1\.0-rc\.[0-9]*"/"version": "0.1.0"/' packages/npm/package.json

@@ -195,8 +195,18 @@ jobs:
           set -euo pipefail
           SKILL=.claude/skills/style-review/SKILL.md
           [ -f "$SKILL" ] || { echo "::error::$SKILL missing"; exit 1; }
+          # The skill handshake counts differently from the adapter handshake in
+          # the other jobs, and the difference is deliberate: do not collapse the
+          # two onto one number. An adapter loads all 21 rules, so it says
+          # "21 rules". The skill emits a 21-row scorecard but checks only 19 of
+          # those rows, because RULE-09 and RULE-10 have no detector and report
+          # skipped. Asserting "21 rules" here passed for the wrong reason: it
+          # matched the frontmatter description rather than the handshake, so it
+          # kept guarding a claim the handshake had already stopped making.
+          # packages/pypi/tests/test_handshake_parity.py pins this list to the
+          # live handshake on every push.
           MISSING=()
-          for token in "style-review active" "21 rules" "deterministic" "semantic via host" "workflow at skills/style-review"; do
+          for token in "style-review active" "21-row scorecard" "19 rules checked" "deterministic" "semantic via host" "skipped: RULE-09, 10" "workflow at skills/style-review"; do
             if ! grep -q -- "$token" "$SKILL"; then
               MISSING+=("$token")
             fi
@@ -235,8 +245,12 @@ jobs:
           echo "::group::claude response"
           echo "$RESP"
           echo "::endgroup::"
+          # Same counts as the static check above; see the note there for why
+          # they differ from the adapter jobs. The trailing skipped-rule list is
+          # left out of this loop because it is asserted against the file
+          # directly, and a model response is the wrong place to pin punctuation.
           MISSING=()
-          for token in "style-review active" "21 rules" "deterministic" "semantic via host"; do
+          for token in "style-review active" "21-row scorecard" "19 rules checked" "deterministic" "semantic via host"; do
             if ! grep -q -- "$token" <<<"$RESP"; then
               MISSING+=("$token")
             fi
