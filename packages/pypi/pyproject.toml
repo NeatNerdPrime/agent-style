@@ -1,5 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+# 77.0.1 is the floor for PEP 639: `license` as an SPDX expression string plus
+# `license-files`. setuptools names 77.0.0 as the first supporting release, but
+# that version was never published to PyPI. Building the sdist therefore needs
+# Python 3.9 or newer (setuptools dropped 3.8 in 75.4.0); installing the
+# published wheel is unaffected, which is what `requires-python` below governs.
+requires = ["setuptools>=77.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,7 +16,14 @@ requires-python = ">=3.8"
 authors = [
     { name = "Yue Zhao", email = "fortis@usc.edu" },
 ]
-license = { text = "MIT AND CC-BY-4.0" }
+license = "MIT AND CC-BY-4.0"
+# Names the paths the bundled data/NOTICE.md already cites as its siblings. PEP
+# 639 installs metadata copies under .dist-info/licenses, while the package-data
+# entry below keeps those sibling references resolvable inside the installed
+# package. A build-root copy is not an option worth taking: PEP 639 forbids a
+# license-files glob from escaping the project directory, so it would mean a
+# fourth copy of the same text in this repo and one more thing to drift.
+license-files = ["agent_style/data/LICENSES/*.txt"]
 keywords = ["writing", "style", "agent", "llm", "ai", "instructions", "prompt"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -40,7 +52,14 @@ Changelog = "https://github.com/yzhao062/agent-style/blob/main/CHANGELOG.md"
 agent-style = "agent_style.cli:main"
 
 [tool.setuptools]
-include-package-data = true
+# False because package-data below enumerates every shipped file and there is no
+# MANIFEST.in, so manifest-derived inclusion adds nothing. Leaving it true made
+# build_py read the license-files paths out of the sdist manifest and warn that
+# `agent_style.data.LICENSES` is an undeclared package. Flipping it drops that
+# warning and adds or removes no payload member: the wheel keeps the same 58
+# byte-identical members, and the sdist keeps the same 75 relative paths once
+# its archive root is excluded, differing only in the embedded copy of this file.
+include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["."]

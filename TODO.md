@@ -150,43 +150,6 @@ A new v0.4.0 task specifically designed to keep content invariant under paraphra
 - Scorecard: `docs/bench-0.3.0-gemini.md` row `paper-04-related-work-agent-benchmarks`
 - Task prompt: `scripts/bench/tasks.md` task id `paper-04-related-work-agent-benchmarks`
 
----
-
-## PEP 639 license metadata migration (carried from v0.3.4)
-
-**Status**: open. **Scope**: `packages/pypi/pyproject.toml` `[project]` table.
-
-### The issue
-
-`python -m build` on the v0.4.0 sdist/wheel emits a setuptools deprecation warning: `project.license` as a TOML table (`license = { text = "MIT AND CC-BY-4.0" }`) is deprecated. Setuptools follows PEP 639, which requires `license = "<SPDX expression>"` (a string) and adds `license-files = ["LICENSES/*.txt"]` for the file list. The setuptools deprecation hard-deadline is **2027-02-18**.
-
-### Fix sketch
-
-Replace the table form with the SPDX-expression form:
-
-```toml
-[project]
-license = "MIT AND CC-BY-4.0"
-license-files = ["agent_style/data/LICENSES/*.txt"]
-```
-
-Path is relative to `packages/pypi/pyproject.toml` (the build root for the PyPI package), not to the repo root. The repo-root `LICENSES/` directory is a sibling reference; the bundled license files used at install time live under the package dir.
-
-Verify the build still includes the LICENSE files in the wheel and sdist; verify PyPI still renders the license metadata correctly.
-
-### Exit criteria
-
-- [ ] `python -m build` emits no `project.license` deprecation warning
-- [ ] PyPI project page renders the license correctly after a test publish (or `twine check` passes)
-- [ ] `LICENSES/` directory contents present in wheel and sdist
-- [ ] This entry moved out of `TODO.md`
-
-### References
-
-- PEP 639: https://peps.python.org/pep-0639/
-- setuptools deprecation timeline: 2027-02-18 hard error
-- v0.3.4 execution-review Round 1 (Codex Low #1, 2026-04-28)
-
 ## How to add a new item
 
 Each entry follows the same shape:
