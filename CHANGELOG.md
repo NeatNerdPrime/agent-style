@@ -10,6 +10,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semantic Versi
 
 ## [Unreleased]
 
+*No unreleased changes queued.*
+
 ## [0.4.1] — 2026-08-13
 
 Patch rather than minor, under a rule this release writes down. RULE-12 reports differently for the same Markdown input in both engines, changing 15 of the 160 preserved drafts, so anyone comparing violation counts across versions will see movement. Moved counts alone no longer decide the version number. No published contract changed here: RULE-12's directive is untouched, and the detector was corrected to match it. Version 0.4.0 took the same class of repair as grounds for a minor bump, in release prose rather than as policy. `RELEASING.md` now carries a rule that supersedes that judgment, so the next one is not a fresh argument. The corrected benchmark figure is labelled as v0.4.1 scoring; the hero figure keeps its original v0.3.0 scoring label.

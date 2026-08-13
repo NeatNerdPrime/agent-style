@@ -8,6 +8,51 @@ Short-lived scratch plans (draft PR submissions, one-shot migrations) belong in 
 
 ---
 
+## PyPI Trusted Publishing is not configured (carried from v0.4.0)
+
+**Status**: open, blocked on a maintainer account action. **Scope**: the `pypi` job in `.github/workflows/publish.yml`.
+
+### The issue
+
+The job has failed on both releases that have fired it, v0.4.0 and v0.4.1, with the same error:
+
+```text
+invalid-publisher: valid token, but no corresponding publisher
+                   (Publisher with matching claims was not found)
+```
+
+No pending publisher exists at pypi.org, so the OIDC token exchange is refused. Both releases were therefore published to PyPI by hand with `twine upload`. That works and leaves the correct artifact, but it means every release shows a red Publish run and depends on a local token. The npm half of the same workflow uses OIDC and has succeeded both times, so the workflow itself is sound; only the PyPI side is unconfigured.
+
+`skip-existing: true` does not paper over this, which is worth recording because it looks like it should. At v0.4.1 the version was already on PyPI before the release fired, and the job still failed. The token exchange happens before the upload step runs, so there is nothing yet for `skip-existing` to skip.
+
+### Fix (about two minutes, maintainer account required)
+
+Add a pending publisher at <https://pypi.org/manage/account/publishing/> with exactly these values, which are the claims the failed runs reported:
+
+| Field | Value |
+|---|---|
+| PyPI project name | `agent-style` |
+| Owner | `yzhao062` |
+| Repository name | `agent-style` |
+| Workflow name | `publish.yml` |
+| Environment name | *leave blank* |
+
+The environment field must stay empty: the `pypi` job declares no `environment:`, and the failed runs reported `environment: MISSING`. Setting a name there produces the same `invalid-publisher` error for a different reason.
+
+### Exit criteria
+
+- [ ] Pending publisher configured at pypi.org
+- [ ] A release fires `publish.yml` and the `pypi` job succeeds without a local token
+- [ ] `RELEASING.md`'s "Real PyPI Upload" section updated: the manual `twine upload` becomes the documented fallback rather than the primary path
+- [ ] This entry moved out of `TODO.md`
+
+### References
+
+- Failed runs: <https://github.com/yzhao062/agent-style/actions/runs/31573383970> (v0.4.0), <https://github.com/yzhao062/agent-style/actions/runs/31714254982> (v0.4.1)
+- PyPI trusted-publisher troubleshooting: <https://docs.pypi.org/trusted-publishers/troubleshooting/>
+
+---
+
 ## Copilot instruction-loading verification (carried from v0.3.0)
 
 **Status**: open. **Scope**: `agent-style enable copilot` / `enable copilot-path` adapters and the `copilot` bench runner in `scripts/bench/run.sh`.
