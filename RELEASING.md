@@ -234,29 +234,35 @@ gh repo edit yzhao062/agent-style --visibility public --accept-visibility-change
 curl -sfL "https://raw.githubusercontent.com/yzhao062/agent-style/vX.Y.Z/RULES.md" | head -5
 ```
 
-## Real PyPI Upload
+## Registry Upload: the Release Does It
 
-Availability recheck immediately before upload:
+**Creating the GitHub Release below is what publishes to both registries.** `publish.yml` fires on `release: published` and uploads to PyPI and npm through Trusted Publishing (OIDC), with no token stored anywhere. Do not upload by hand first; the sections below are the fallback for when the workflow cannot.
+
+Both sides are now configured. npm's trusted publisher has worked since v0.4.0. PyPI's was missing until 2026-08-13, which is why the `pypi` job failed on v0.4.0 and v0.4.1 and both went out by hand. It is configured now, and the re-run of the v0.4.1 job completed its token exchange and reached the upload step. That exchange was the part that was broken, so it is proven; the upload itself skipped, because the artifacts were already on PyPI from the manual run. **The next release is the first end-to-end OIDC upload.** Watch it rather than assuming it.
+
+Verify after the release run goes green:
+
+```bash
+# Force a fresh install to bypass pip cache and PyPI CDN staleness.
+pip install --upgrade --force-reinstall --no-cache-dir agent-style==X.Y.Z
+agent-style --version           # should print X.Y.Z
+npm view agent-style version    # should print X.Y.Z
+npx --yes agent-style@X.Y.Z --version
+```
+
+### Fallback: publishing by hand
+
+Use only when `publish.yml` cannot run or its registry job fails. Recheck availability immediately before either command, because both registries are immutable once a version exists:
 
 ```bash
 curl -sfI https://pypi.org/pypi/agent-style/json && echo "TAKEN (halt)" || echo "available"
 python -m twine upload packages/pypi/dist/*
-# Verify (force fresh install to bypass pip cache and PyPI CDN staleness):
-pip install --upgrade --force-reinstall --no-cache-dir agent-style==X.Y.Z
-agent-style --version   # should print X.Y.Z
-```
 
-## npm Publish
-
-Availability recheck immediately before publish:
-
-```bash
 npm view agent-style version 2>/dev/null && echo "TAKEN (halt)" || echo "available"
 npm publish packages/npm --access public
-# Verify:
-npm view agent-style version   # should print X.Y.Z
-cd "$(mktemp -d)" && npx --yes agent-style@X.Y.Z --version
 ```
+
+A hand-upload before the Release is safe to combine with the workflow: `skip-existing: true` on the PyPI action skips a version that is already there. It does not rescue a broken publisher, though. The token exchange runs before the upload step, so a misconfigured publisher fails while there is still nothing to skip, which is what both v0.4.x runs showed.
 
 ## GitHub Release
 
