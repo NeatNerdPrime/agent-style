@@ -10,7 +10,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semantic Versi
 
 ## [Unreleased]
 
-This section is being prepared as **0.4.1**. The package version files, adapters and figures already carry that number. The heading becomes `## [0.4.1]` with its date at tag time. Patch rather than minor, under a rule this release writes down. RULE-12 reports differently for the same Markdown input in both engines, changing 15 of the 160 preserved drafts, so anyone comparing violation counts across versions will see movement. Moved counts alone no longer decide the version number. No published contract changed here: RULE-12's directive is untouched, and the detector was corrected to match it. Version 0.4.0 took the same class of repair as grounds for a minor bump, in release prose rather than as policy. `RELEASING.md` now carries a rule that supersedes that judgment, so the next one is not a fresh argument. The corrected benchmark figure is labelled as v0.4.1 scoring; the hero figure keeps its original v0.3.0 scoring label.
+## [0.4.1] — 2026-08-13
+
+Patch rather than minor, under a rule this release writes down. RULE-12 reports differently for the same Markdown input in both engines, changing 15 of the 160 preserved drafts, so anyone comparing violation counts across versions will see movement. Moved counts alone no longer decide the version number. No published contract changed here: RULE-12's directive is untouched, and the detector was corrected to match it. Version 0.4.0 took the same class of repair as grounds for a minor bump, in release prose rather than as policy. `RELEASING.md` now carries a rule that supersedes that judgment, so the next one is not a fresh argument. The corrected benchmark figure is labelled as v0.4.1 scoring; the hero figure keeps its original v0.3.0 scoring label.
 
 ### Fixed
 
@@ -251,7 +253,8 @@ The v0.3.0 cycle turns the bench from a narrow, API-billable CI job into a full-
 
 ---
 
-[Unreleased]: https://github.com/yzhao062/agent-style/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/yzhao062/agent-style/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/yzhao062/agent-style/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/yzhao062/agent-style/compare/v0.3.6...v0.4.0
 [0.3.6]: https://github.com/yzhao062/agent-style/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/yzhao062/agent-style/compare/v0.3.4...v0.3.5
