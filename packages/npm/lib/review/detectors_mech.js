@@ -353,8 +353,33 @@ function rule12(text) {
     if (fenceMaskForLineIdx(linesAll, lineNo - 1)) continue;
     const stripped = line.trim();
     if (!stripped || stripped.startsWith('#') || stripped.startsWith('|')) continue;
-    // Conservative split: punct + space + Capital/open-quote.
-    const sentences = stripped.split(/(?<=[.!?])\s+(?=[A-Z"'(\[])/);
+    // Two alternatives, mirroring _SENTENCE_SPLIT_RE in the Python engine.
+    // First: the original conservative split on punct + space + Capital or
+    // open-quote. Second: an inline-code opener, because technical prose
+    // routinely starts a sentence with a code span, and without it two ordinary
+    // sentences were counted as one over-long sentence.
+    //
+    // The code-span branch is guarded against the abbreviations that routinely
+    // precede a code span: dotted initialisms (`e.g.`, `i.e.`) and the one-token
+    // forms `vs.`, `cf.` and `Fig.`. Unguarded, any of them reads as a sentence
+    // end and silently suppresses a genuine violation, trading a visible false
+    // positive for an invisible false negative. `etc.` is deliberately absent:
+    // mid-sentence it takes a comma, and at a sentence end it is a real boundary
+    // a guard would wrongly merge.
+    //
+    // Both branches also handle Markdown emphasis on either side of the
+    // boundary. The optional closing run absorbs markup after the punctuation,
+    // because a sentence ending `.**` puts that markup between the period and
+    // the whitespace. That run sits outside the lookbehind to stay identical to
+    // the Python engine, which cannot express it inside one (`re` rejects a
+    // variable-width lookbehind).
+    //
+    // Every markup opener lives in the SECOND branch so it inherits the
+    // abbreviation guards. In the first branch they would bypass every guard,
+    // and `e.g. *json*` would silently suppress a real violation.
+    const sentences = stripped.split(
+      /(?<=[.!?])(?:\*\*|__|\*|_|`)?\s+(?=[A-Z"'(\[])|(?<!\b(?:[A-Za-z]\.){2})(?<!\b(?:[Vv][Ss]|[Cc][Ff])\.)(?<!\b[Ff][Ii][Gg]\.)(?<=[.!?])(?:\*\*|__|\*|_|`)?\s+(?=[`*_])/,
+    );
     for (const sentence of sentences) {
       const words = sentence.match(/\b[\w'-]+\b/g) || [];
       if (words.length > 30) {

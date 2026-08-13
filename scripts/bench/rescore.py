@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -111,6 +112,20 @@ def discover_scope() -> tuple[set[str], set[str]]:
         )
 
     payload = json.loads(proc.stdout)
+
+    # The replay is run from `packages/pypi`, and `load_rules()` prefers a
+    # project-local `.agent-style/RULES.md` found by walking up from the working
+    # directory. One placed at `packages/pypi/`, `packages/`, or the repository
+    # root would supply the rule metadata while the identity digest below went on
+    # hashing the bundled copy, so the report would name a file that did not
+    # score it. The engine already reports which source it chose; refuse any
+    # answer but the manifest-covered one.
+    if payload.get("rules_source") != "package-bundle":
+        raise RuntimeError(
+            "replay must use the manifest-covered package-bundle RULES.md; "
+            f"resolved {payload.get('rules_source')!r}"
+        )
+
     concrete: set[str] = set()
     skipped: set[str] = set()
     for result in payload["rule_results"]:
@@ -230,6 +245,93 @@ def rule_row(card: dict, rule: str) -> dict[str, int]:
     )
 
 
+SCORER_RELS = tuple(
+    sorted(
+        [
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "packages" / "pypi" / "agent_style").rglob("*.py")
+        ]
+        + [
+            "packages/pypi/agent_style/data/RULES.md",
+            "packages/pypi/agent_style/data/tools.json",
+            "scripts/bench/aggregate.py",
+            "scripts/bench/rescore.py",
+            "scripts/bench/run.sh",
+            "scripts/bench/tasks.md",
+        ]
+    )
+)
+
+
+def engine_identity() -> tuple[str, str]:
+    """Return the version and SHA-256 of the complete replay scorer.
+
+    A deterministic replay is only publishable when the artifact says what
+    computed it, and the version alone cannot say that: during development the
+    five version files still carry the previous number while the scorer already
+    behaves like the next release.
+
+    The manifest covers every path the replay actually reads, not just the
+    detector module. `primitive.py` decides which rules enter the mechanical
+    bucket, `run.sh` tallies the JSON, `aggregate.py` parses the scorecards and
+    `tasks.md` selects the drafts, so any of them can move a published number.
+    An earlier version of this hashed `detectors_mech.py` alone, and editing
+    `primitive.py` left the identity byte-identical.
+    """
+    version = ""
+    init = ROOT / "packages" / "pypi" / "agent_style" / "__init__.py"
+    for line in init.read_text(encoding="utf-8").splitlines():
+        if line.startswith("__version__"):
+            version = line.split("=", 1)[1].strip().strip('"').strip("'")
+            break
+    if not version:
+        raise RuntimeError(f"{init}: missing or empty __version__ marker")
+
+    return version, manifest_digest(SCORER_RELS)
+
+
+def manifest_digest(rels: tuple[str, ...]) -> str:
+    """Hash an ordered set of repository-relative paths, name and content both.
+
+    Each entry is length-prefixed so that no rename or concatenation of two
+    paths can collide with a different set of files.
+
+    Line endings are normalised to LF before hashing, because the digest has to
+    identify committed content rather than one checkout of it. `.gitattributes`
+    declares `*.py text eol=lf`, so a fresh clone gets LF on every platform,
+    while an older working tree can still hold CRLF that `git diff` reports as
+    no change at all. Hashing raw bytes made the recorded identity depend on
+    which working tree ran the replay, which is the one thing a digest printed
+    for external verification may not do. Nothing is lost by normalising: the
+    engine applies universal-newline translation on both runtimes, so line
+    endings cannot move a score.
+    """
+    digest = hashlib.sha256()
+    for rel in rels:
+        name = rel.encode("utf-8")
+        data = (ROOT / rel).read_bytes().replace(b"\r\n", b"\n")
+        digest.update(len(name).to_bytes(4, "big"))
+        digest.update(name)
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()
+
+
+def inputs_identity() -> str:
+    """Return the SHA-256 of the replay inputs the scorer does not produce.
+
+    The scorer manifest covers what computes the corrected column, and the
+    drafts tree hash covers what it reads. Neither reaches the four published
+    scorecards, and every original count, every delta, and the change-in-delta
+    column is parsed straight out of them. Editing one silently rewrites the
+    comparison the report exists to make while both recorded identities hold
+    still, so they get a digest of their own rather than being folded into the
+    scorer manifest: they are evidence, not code.
+    """
+    rels = tuple(sorted(r.original.relative_to(ROOT).as_posix() for r in RUNNERS))
+    return manifest_digest(rels)
+
+
 def render_report(
     original: dict[str, dict],
     corrected: dict[str, dict],
@@ -237,6 +339,9 @@ def render_report(
     skipped: set[str],
     draft_count: int,
     drafts_tree: str,
+    engine_version: str,
+    scorer_sha256: str,
+    cards_sha256: str,
 ) -> str:
     lines: list[str] = []
     lines.append("# agent-style bench v0.3.0: corrected-engine re-score")
@@ -246,7 +351,9 @@ def render_report(
         f"`{DRAFTS_REL}/` at tree `{drafts_tree}`, verified clean against the "
         "index before scoring. It makes no model calls and generates no "
         "new prose. Original values come from the four published runner "
-        "scorecards. Corrected values use the review engine in this clone."
+        f"scorecards, whose SHA-256 as a set is `{cards_sha256}`. Corrected "
+        f"values use agent-style v{engine_version}; scoring-source manifest "
+        f"SHA-256 `{scorer_sha256}`."
     )
     lines.append("")
     lines.append(
@@ -275,12 +382,6 @@ def render_report(
         "`skipped`, not numeric zero. `RULE-05` and `RULE-06` also emit a separate "
         "semantic component with `status: skipped`; their mechanical components "
         "are included in the totals."
-    )
-    lines.append("")
-    lines.append(
-        "`RULE-A` is provisional because its structural detector is being revised "
-        "in parallel. It remains skipped in this mechanical replay, so its interim "
-        "detector behavior cannot affect any total below."
     )
     lines.append("")
 
@@ -345,8 +446,7 @@ def render_report(
     lines.append("## Full per-rule scorecard")
     lines.append("")
     lines.append(
-        "`O` is original and `C` is corrected. Bold corrected values changed. "
-        "The asterisk on `RULE-A` marks its provisional detector."
+        "`O` is original and `C` is corrected. Bold corrected values changed."
     )
     lines.append("")
     header = ["Rule"]
@@ -355,7 +455,7 @@ def render_report(
     lines.append("| " + " | ".join(header) + " |")
     lines.append("| --- |" + " ---: | ---: |" * len(RUNNERS))
     for rule in RULES:
-        shown_rule = f"{rule}*" if rule == "RULE-A" else rule
+        shown_rule = rule
         cells = [shown_rule]
         for runner in RUNNERS:
             if rule in skipped:
@@ -461,8 +561,11 @@ def main() -> int:
         for runner in RUNNERS:
             validate_card_arithmetic(first[runner.key], runner.drafts)
 
+        engine_version, scorer_sha256 = engine_identity()
+        cards_sha256 = inputs_identity()
         report = render_report(
-            original, first, mechanical, skipped, draft_count, drafts_tree
+            original, first, mechanical, skipped, draft_count, drafts_tree,
+            engine_version, scorer_sha256, cards_sha256,
         )
         output = args.output if args.output.is_absolute() else ROOT / args.output
         output.parent.mkdir(parents=True, exist_ok=True)

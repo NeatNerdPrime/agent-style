@@ -76,6 +76,10 @@ Smoke A fails → defer PR, file upstream issue with the exact repo layout repro
 
 **Status**: open. **Scope**: `docs/hero-source/hero.html` row 3 (Paper related-work section) and the rendered `docs/hero.png`.
 
+### Scoring provenance (added when RULE-12 was repaired)
+
+The three row counts are the original v0.3.0 scoring and no longer match the shipped engine, which reports fewer violations after the RULE-05, RULE-A, RULE-B, RULE-D, RULE-G, RULE-I and RULE-12 repairs. The figure and `README.md` now say so, which is the honest minimum. Do not renumber these rows in place: they label specific quoted excerpts, so the counts and the highlighted phrases have to move together. Whichever fix below is taken, re-score the chosen pair with the current engine and update the row label at the same time, then drop the provenance line from the figure footer.
+
 ### The issue
 
 Row 3 shows Gemini 3 Flash on `paper-04-related-work-agent-benchmarks`, 6 → 4 violations. Prose is stiff in both conditions:
@@ -128,7 +132,7 @@ Pick the new pair for the hero row and re-render.
 
 `paper-02-methods-contrastive` — same algorithm-naming concern as paper-01 unless both drafts happen to invent the same name.
 
-A new v0.4.0 task specifically designed to keep content invariant under paraphrase (survey-style summary of a canonical topic with explicit content anchors).
+A new task in the next fresh model-generation bench, specifically designed to keep content invariant under paraphrase (survey-style summary of a canonical topic with explicit content anchors). No such task entered v0.4.0, and detector-only releases do not run a generation bench at all, so this waits for the next release that does.
 
 ### What NOT to do
 

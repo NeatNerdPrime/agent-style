@@ -438,7 +438,41 @@ def _rule_i(text: str) -> list[Violation]:
 # ---------- RULE-12 sentence length > 30 words ------------------------------
 
 
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'\(\[])")
+# Two alternatives. The first is the original conservative split. The second
+# adds an inline-code opener, because technical prose routinely starts a
+# sentence with a code span and without it two ordinary sentences were counted
+# as one over-long sentence.
+#
+# The code-span branch is guarded against the abbreviations that routinely
+# precede a code span in technical prose: dotted initialisms (`e.g.`, `i.e.`)
+# and the one-token forms `vs.`, `cf.` and `Fig.`. An unguarded backtick reads
+# any of them as a sentence end and silently suppresses a genuine violation,
+# which trades a visible false positive for an invisible false negative. Every
+# guard is a fixed-width lookbehind, which is what Python accepts.
+#
+# `etc.` is deliberately absent. Mid-sentence it is followed by a comma, which
+# never matches this branch anyway, and at the end of a sentence it is a real
+# boundary that a guard would wrongly merge.
+#
+# Both branches also handle Markdown emphasis on either side of the boundary.
+# The optional closing run absorbs markup after the punctuation, because a
+# sentence ending `.**` puts that markup between the period and the whitespace
+# and the lookbehind would otherwise never see the period. That run sits outside
+# the lookbehind rather than inside it: Python `re` rejects a variable-width
+# lookbehind, so `(?<=[.!?][*_`]{0,2})` does not compile.
+#
+# Every markup opener (`` ` ``, `*`, `_`) lives in the SECOND branch so it
+# inherits the abbreviation guards. Putting them in the first branch instead
+# looks equivalent and is not: `e.g. *json*` and `Fig. **2**` would bypass every
+# guard and silently suppress a real violation, which is the same false negative
+# the guards exist to prevent.
+_SENTENCE_SPLIT_RE = re.compile(
+    r"(?<=[.!?])(?:\*\*|__|\*|_|`)?\s+(?=[A-Z\"'\(\[])|"
+    r"(?<!\b(?:[A-Za-z]\.){2})"
+    r"(?<!\b(?:[Vv][Ss]|[Cc][Ff])\.)"
+    r"(?<!\b[Ff][Ii][Gg]\.)"
+    r"(?<=[.!?])(?:\*\*|__|\*|_|`)?\s+(?=[`*_])"
+)
 
 
 def _rule_12(text: str) -> list[Violation]:

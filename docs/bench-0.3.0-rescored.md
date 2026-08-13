@@ -1,6 +1,6 @@
 # agent-style bench v0.3.0: corrected-engine re-score
 
-This report re-scores the 160 committed drafts in `docs/bench-0.3.0-drafts/` at tree `a405f980e87becefbbc118495a775d2642ec5d31`, verified clean against the index before scoring. It makes no model calls and generates no new prose. Original values come from the four published runner scorecards. Corrected values use the review engine in this clone.
+This report re-scores the 160 committed drafts in `docs/bench-0.3.0-drafts/` at tree `a405f980e87becefbbc118495a775d2642ec5d31`, verified clean against the index before scoring. It makes no model calls and generates no new prose. Original values come from the four published runner scorecards, whose SHA-256 as a set is `1361bbb188e1d655a6dd95fbdf3c6e633b89ca505bbd85e5ff712e5a3bc94f18`. Corrected values use agent-style v0.4.1; scoring-source manifest SHA-256 `dde121a3cef16666aa804fadef9fc861ec351e10710707941f27a28cd06380c6`.
 
 The replay uses the original harness and its exact scoring invocation: `agent-style review --mechanical-only --audit-only`. Delta is treatment minus baseline. A negative delta means fewer flagged violations in the treatment drafts. Change in delta is corrected minus original.
 
@@ -12,31 +12,33 @@ Mechanically scored rules: `RULE-05`, `RULE-06`, `RULE-12`, `RULE-B`, `RULE-D`, 
 
 Rules with no scored component under `--mechanical-only`, each reported with `status: skipped`: `RULE-01`, `RULE-02`, `RULE-03`, `RULE-04`, `RULE-07`, `RULE-08`, `RULE-09`, `RULE-10`, `RULE-11`, `RULE-A`, `RULE-C`, `RULE-E`, `RULE-F`, `RULE-H`. A skipped rule is shown as `skipped`, not numeric zero. `RULE-05` and `RULE-06` also emit a separate semantic component with `status: skipped`; their mechanical components are included in the totals.
 
-`RULE-A` is provisional because its structural detector is being revised in parallel. It remains skipped in this mechanical replay, so its interim detector behavior cannot affect any total below.
-
 ## Totals
 
 | Runner | Original baseline | Original treatment | Original delta | Corrected baseline | Corrected treatment | Corrected delta | Change in delta |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Claude | 105 | 58 | -47 | 91 | 48 | **-43** | +4 |
-| Codex | 51 | 28 | -23 | 49 | 26 | -23 | 0 |
-| Copilot | 61 | 63 | +2 | 59 | 60 | **+1** | -1 |
-| Gemini | 79 | 14 | -65 | 73 | 12 | **-61** | +4 |
-| **Pooled** | **296** | **163** | **-133** | **272** | **146** | **-126** | **+7** |
+| Claude | 105 | 58 | -47 | 88 | 47 | **-41** | +6 |
+| Codex | 51 | 28 | -23 | 48 | 26 | **-22** | +1 |
+| Copilot | 61 | 63 | +2 | 52 | 52 | **0** | -2 |
+| Gemini | 79 | 14 | -65 | 65 | 9 | **-56** | +9 |
+| **Pooled** | **296** | **163** | **-133** | **253** | **134** | **-119** | **+14** |
 
 ## Rule deltas that moved
 
 | Runner | Rule | Original delta | Corrected delta | Change in delta |
 | --- | --- | ---: | ---: | ---: |
+| Claude | RULE-12 | -17 | **-15** | **+2** |
 | Claude | RULE-B | -27 | **-26** | **+1** |
 | Claude | RULE-I | -4 | **-1** | **+3** |
+| Codex | RULE-12 | -23 | **-22** | **+1** |
+| Copilot | RULE-12 | +2 | **+1** | **-1** |
 | Copilot | RULE-I | +1 | **0** | **-1** |
 | Gemini | RULE-05 | -2 | **-3** | **-1** |
+| Gemini | RULE-12 | -34 | **-29** | **+5** |
 | Gemini | RULE-I | -6 | **-1** | **+5** |
 
 ## Full per-rule scorecard
 
-`O` is original and `C` is corrected. Bold corrected values changed. The asterisk on `RULE-A` marks its provisional detector.
+`O` is original and `C` is corrected. Bold corrected values changed.
 
 | Rule | Claude O | Claude C | Codex O | Codex C | Copilot O | Copilot C | Gemini O | Gemini C |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -51,8 +53,8 @@ Rules with no scored component under `--mechanical-only`, each reported with `st
 | RULE-09 | skipped | skipped | skipped | skipped | skipped | skipped | skipped | skipped |
 | RULE-10 | skipped | skipped | skipped | skipped | skipped | skipped | skipped | skipped |
 | RULE-11 | skipped | skipped | skipped | skipped | skipped | skipped | skipped | skipped |
-| RULE-12 | -17 | -17 | -23 | -23 | +2 | +2 | -34 | -34 |
-| RULE-A* | skipped | skipped | skipped | skipped | skipped | skipped | skipped | skipped |
+| RULE-12 | -17 | **-15** | -23 | **-22** | +2 | **+1** | -34 | **-29** |
+| RULE-A | skipped | skipped | skipped | skipped | skipped | skipped | skipped | skipped |
 | RULE-B | -27 | **-26** | 0 | 0 | 0 | 0 | -8 | -8 |
 | RULE-C | skipped | skipped | skipped | skipped | skipped | skipped | skipped | skipped |
 | RULE-D | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -72,6 +74,6 @@ These rule deltas stayed fixed only because baseline and treatment counts moved 
 
 ## Interpretation
 
-The pooled delta changes from -133 to -126, a movement of +7 violations. The rescore changes the measurement of saved prose only. It does not rerun model generation, resolve runner instruction-loading caveats, or measure any skipped rule.
+The pooled delta changes from -133 to -119, a movement of +14 violations. The rescore changes the measurement of saved prose only. It does not rerun model generation, resolve runner instruction-loading caveats, or measure any skipped rule.
 
 These are directional benchmark counts, not a claim of statistical significance or overall writing quality.

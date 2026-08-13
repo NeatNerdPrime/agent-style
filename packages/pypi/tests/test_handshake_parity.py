@@ -8,7 +8,10 @@ that a real Claude response reproduces it.
 
 That workflow runs on ``release.published`` and manual dispatch only, so a
 handshake edit and a stale assertion cannot collide until after the release is
-tagged and published. It happened exactly that way in v0.4.0: the handshake
+tagged and published. It happened exactly that way on the release that first
+shipped the corrected scorecard wording (do not name it here: ``bump-version.py``
+rewrites version literals in this file and would falsify the account): the
+handshake
 changed from "21 rules" to "21-row scorecard, 19 rules checked", the workflow
 kept asserting the old substring, and the static check in the same job passed
 anyway because "21 rules" still appeared in the skill's frontmatter description.

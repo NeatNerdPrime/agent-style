@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -387,6 +388,124 @@ def test_rule_d_uses_markdown_block_boundaries(
     assert _audit_text_at(tmp_path, body, "RULE-D") == expected, (
         f"RULE-D block segmentation wrong for: {label}"
     )
+
+
+_TWENTY_A = (
+    "Alpha beta gamma delta epsilon zeta eta theta iota kappa "
+    "lambda mu nu xi omicron pi rho sigma tau upsilon."
+)
+_TWENTY_CAPITAL = (
+    "One two three four five six seven eight nine ten "
+    "eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty."
+)
+_TWENTY_INLINE_CODE = (
+    "`code` two three four five six seven eight nine ten "
+    "eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty."
+)
+_TWENTY_EMPHASIS = (
+    "*Emphasized* two three four five six seven eight nine ten "
+    "eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty."
+)
+_TWENTY_UNDERSCORE = (
+    "_Emphasized_ two three four five six seven eight nine ten "
+    "eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty."
+)
+
+
+@pytest.mark.parametrize(
+    ("label", "second", "expected"),
+    [
+        ("capital opener", _TWENTY_CAPITAL, []),
+        ("inline-code opener", _TWENTY_INLINE_CODE, []),
+        ("emphasis opener", _TWENTY_EMPHASIS, []),
+        ("underscore opener", _TWENTY_UNDERSCORE, []),
+    ],
+)
+def test_rule_12_splits_a_sentence_whatever_markup_opens_it(
+    tmp_path: Path, label: str, second: str, expected: list
+) -> None:
+    """Two 20-word sentences are two sentences however the second one opens.
+
+    The splitter required the next sentence to begin with a capital, a quote,
+    ``(`` or ``[``. Prose opens sentences with an inline code span or with
+    emphasis constantly, and none of those characters was in the class, so each
+    pair was counted as one 40-word sentence and reported as a violation that
+    was not there. The capital case is the control: it always passed.
+    """
+    text = f"{_TWENTY_A} {second}"
+    assert _audit_text_at(tmp_path, text, "RULE-12") == expected, (
+        f"RULE-12 split wrong for: {label}"
+    )
+
+
+@pytest.mark.parametrize("closer", ["**", "__", "*", "_", "`"])
+def test_rule_12_splits_when_markup_closes_the_first_sentence(
+    tmp_path: Path, closer: str
+) -> None:
+    """Markup after the final punctuation must not hide the sentence boundary.
+
+    A sentence ending ``.**`` puts the closing delimiter between the period and
+    the whitespace, so a lookbehind anchored on the punctuation never saw it.
+    Every bolded entry in this repository's own CHANGELOG was therefore read as
+    one sentence running from the bold lead through the sentence after it.
+
+    Each case puts the punctuation *inside* the delimiter, which is the shape
+    that was broken. A period after a closing delimiter always split, so a
+    fixture written that way proves nothing.
+    """
+    lead = " ".join(_TWENTY_A.split()[:-1])
+    text = f"{closer}Strong {lead}.{closer} Then {_TWENTY_CAPITAL}"
+    assert _audit_text_at(tmp_path, text, "RULE-12") == [], (
+        f"RULE-12 failed to split across the closing delimiter {closer!r}"
+    )
+
+
+_ABBREVIATION_LEADS = [
+    ("e.g.", "The command supports several output formats, e.g."),
+    ("vs.", "The evaluation compares our primary system vs."),
+    ("Fig.", "The evaluation trend appears in Fig."),
+    ("cf.", "The report compares the alternate protocol, cf."),
+]
+_VALUE_MARKUP = ["`json`", "*json*", "_json_", "**json**"]
+
+
+@pytest.mark.parametrize("abbreviation,lead", _ABBREVIATION_LEADS)
+@pytest.mark.parametrize("value", _VALUE_MARKUP)
+def test_rule_12_does_not_split_an_abbreviation_before_formatted_value(
+    tmp_path: Path, abbreviation: str, lead: str, value: str
+) -> None:
+    """An abbreviation before a formatted value is not a sentence boundary.
+
+    Admitting markup openers without a guard reads the period in ``e.g.`` as a
+    sentence end, cuts one long sentence into sub-threshold pieces, and reports
+    nothing. That trades the false positive the openers fix for a false
+    negative, which is the worse of the two: a missing violation is invisible,
+    while a spurious one is at least visible. Every markup opener therefore
+    lives in the guarded branch, and this matrix is what proves it, because a
+    guard applied to only one delimiter looks correct until another is tried.
+
+    ``etc.`` is deliberately unguarded and so is absent. Mid-sentence it takes a
+    comma, which never matches, and at a sentence end it is a real boundary.
+    """
+    text = (
+        f"{lead} {value}, when automated consumers need stable fields for "
+        "parsing, validation, archival, comparison, monitoring, and downstream "
+        "reporting across multiple independent services during every nightly "
+        "scheduled production run."
+    )
+    expected_words = len(re.findall(r"\b[\w'-]+\b", text))
+    assert expected_words > 30, "fixture must exceed the threshold to be meaningful"
+    violations = _audit_text(tmp_path, text, "RULE-12")
+    assert [v["detail"] for v in violations] == [
+        f"sentence length {expected_words} words (>30)"
+    ], f"RULE-12 split at {abbreviation} before {value}"
+
+
+def test_rule_12_still_flags_a_genuinely_long_sentence(tmp_path: Path) -> None:
+    """The looser split must not stop the rule from firing on a real violation."""
+    text = " ".join(["word"] * 35) + "."
+    violations = _audit_text(tmp_path, text, "RULE-12")
+    assert [v["detail"] for v in violations] == ["sentence length 35 words (>30)"]
 
 
 def test_list_tools_handles_skill_entries() -> None:

@@ -90,6 +90,24 @@ All five must hold the same final shared version `X.Y.Z` before tag. The first t
 
 Also: add a `## [X.Y.Z] — YYYY-MM-DD` section to `CHANGELOG.md`, move contents from `[Unreleased]`, and update the compare-link block at the bottom so `[X.Y.Z]` resolves and `[Unreleased]` compares against the new tag.
 
+**A sixth version carrier is edited by hand: the "Version distribution" banner at the top of `CHANGELOG.md`.** It names the release being cut and the last shared registry release before it, and the paragraph above cites it as the authoritative record of what may be published. `bump-version.py` cannot maintain it, because `CHANGELOG.md` is on the skip list precisely so that the version numbers in past entries stay pinned. The drift check does not cover it either, since it is prose rather than a fixed assignment. Restate both numbers in the same commit as the bump, before checking the docs-only tag list against it.
+
+### Choosing minor or patch
+
+The version number tracks the **kind** of externally visible change, not how far any number moved.
+
+- **Minor** (the `y` in `0.y.z`): something this project publishes as a contract was intentionally changed. Three surfaces count as that contract. The **ruleset**: a rule added or removed, or a directive reworded so that it asks for something different. The **adapter files**: what an adapter states, which rules it carries, where it installs. The **CLI**: a subcommand, flag, or output field added, removed, or given new meaning.
+- **Patch** (the `z`): one of those contracts was already documented and the release makes the code match it again. A detector corrected to a directive that did not change is the common case. So is a packaging or build defect, a cross-engine divergence where one engine was wrong, or a documentation correction.
+
+Two clarifications, because both have already caused an argument:
+
+- **Moved bench counts are not the trigger.** They are a consequence, and the CHANGELOG states them either way: name the rules whose reported counts change, how many preserved drafts move, and which published figures were restated. A repair can move every published figure and still be a patch, because the rule being enforced is the same rule.
+- **A version or pinned-URL refresh inside an adapter is not an adapter contract change.** Every adapter carries the release version in its handshake line and its `raw.githubusercontent.com` pin. `bump-version.py` rewrites all of them on every release, minor and patch alike.
+
+The reason for drawing the line here is that detector repair is this repository's routine work. If every corrected detector forced a minor bump, the minor number would count bug fixes rather than describe the ruleset, and `0.y` would be spent within a few cycles.
+
+v0.4.0 announced "Minor rather than patch" and gave two reasons: six detector-backed rules reporting differently for the same input, and changed Node file-reading semantics. Neither is a minor under this section. The first is moved counts. The second was a defect repair, since Python had always applied universal-newline translation and Node had not, so the release restored a documented parity contract rather than changing one. This section supersedes that judgment for later releases. The v0.4.0 entry stays exactly as written, because it records what that release decided.
+
 ## TestPyPI Rehearsal (Before Tag)
 
 Rehearsal uses a **pre-release version**, not the final one, because registries are immutable: once `X.Y.Z` is uploaded anywhere, a packaging fix cannot reuse that version string without a bump. Rehearsal versions are ecosystem-specific because PyPI uses PEP 440 (`0.1.0rc1`) and npm uses SemVer (`0.1.0-rc.1`).
@@ -249,10 +267,18 @@ echo "v*-release-notes.md" >> .git/info/exclude   # one-time, repo-local ignore
 gh release create vX.Y.Z --target main --title "vX.Y.Z" --notes-file vX.Y.Z-release-notes.md
 ```
 
-## Benchmarks and Experiments Run After the Release, Never Before
+## Model Generation After the Release; Replay Only from a Frozen Candidate
 
-A run whose numbers will be published must score with a **released** engine, named by its version.
-Do not start a benchmark or an experiment against an unreleased working tree, however green it is.
+A **model-generation** run whose numbers will be published must score with a released engine, named
+by its version. Do not generate new model outputs against an unreleased working tree.
+
+A deterministic replay of already-committed drafts is the sole exception. It may run from a frozen
+release candidate after all five version files are bumped, and only if the generated report records
+three identities and the release tag is created from the exact bytes they cover: that candidate
+version, a SHA-256 manifest of every scoring-source path named by `scripts/bench/rescore.py`, and a
+second SHA-256 over the four published scorecards the original column is read from. The replay also
+refuses to run against a project-local `.agent-style/RULES.md`, which would otherwise supply the
+rules while the manifest went on hashing the bundled copy.
 
 The reason is on the record in this repository. The v0.3.0-cycle scorecards were produced by the
 0.2.0 scoring package while the filenames named the 0.3.0 release cycle, so no external reader could
@@ -261,7 +287,7 @@ blob hashes to establish it afterwards. "Scored with agent-style 0.4.0" is check
 "scored with commit `a96753d`" is not, and a commit on `main` can be rewritten or become ambiguous
 in a way a published version cannot.
 
-So the order is fixed:
+For model-generation runs, the order is fixed:
 
 1. Tag and publish the release to both registries.
 2. Freeze any floating model alias to a pinned identifier, and archive the task set and both control
@@ -352,10 +378,16 @@ the README figure when a major/minor release warrants it.
 
 ### Cadence
 
-Run a fresh model-generation bench before tagging a major or minor release
-that changes the rule payload, the generation adapters, the task set, or
-runner behavior. Skip on patch releases (v0.2.1, v0.2.2) unless the patch
-touches bench code itself.
+Run a fresh model-generation bench after tagging and publishing a major or
+minor release that changes the rule payload, the generation adapters, the task
+set, or runner behavior. Skip on patch releases (v0.2.1, v0.2.2) unless the
+patch touches bench code itself.
+
+**The detector-only exception below outranks that last clause.** A release that
+only corrects deterministic scoring routinely touches `scripts/bench/`, because
+the replay and its report live there. Reading the cadence line alone would then
+require a fresh generation run, which is the one thing such a release must not
+do. When both apply, follow the exception.
 
 **Detector-only exception.** A release that changes only deterministic scoring
 must NOT run a fresh generation bench. New generations would confound the
@@ -365,6 +397,18 @@ drafts, requires two matching replay passes, and commits the corrected report.
 It may retain the historical figure only when the README labels the figure's
 scoring version and links the corrected report. `scripts/bench/rescore.py`
 implements this path; v0.4.0 is the first release to take it.
+
+**Regenerate the report from the frozen release candidate, not from the
+development tree.** After the five-file bump, run
+`python scripts/bench/rescore.py --verify-repeat`; require the report to name
+`X.Y.Z`, the scoring-source manifest SHA-256 and the scorecard-set SHA-256, and
+confirm that both replay passes match. Compare the numeric tables with any
+development-only preview; the identity line is expected to change. Any later
+change to a covered path invalidates the report and requires another two-pass
+replay, and `rescore.py` covers itself, so editing it counts. Before tagging,
+recompute both digests from the release tree and require each to equal the value
+in the report. That comparison is safe across platforms because both digests
+normalise line endings before hashing.
 
 ### Maintainer machine prerequisites
 

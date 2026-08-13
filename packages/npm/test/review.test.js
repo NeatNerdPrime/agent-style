@@ -313,3 +313,78 @@ for (const [label, body, expected] of [
     assert.deepEqual(auditTextAt(body, 'RULE-D'), expected);
   });
 }
+
+// Two 20-word sentences are two sentences however the second one opens. The
+// splitter required a capital, quote, `(` or `[`; prose opens sentences with an
+// inline code span or with emphasis constantly, and none of those characters was
+// in the class, so each pair scored as one 40-word violation that was not there.
+// The capital case is the control: it always passed.
+const TWENTY_A =
+  'Alpha beta gamma delta epsilon zeta eta theta iota kappa ' +
+  'lambda mu nu xi omicron pi rho sigma tau upsilon.';
+const TWENTY_TAIL =
+  'two three four five six seven eight nine ten ' +
+  'eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.';
+const TWENTY_CAPITAL = `One ${TWENTY_TAIL}`;
+for (const [label, second, expected] of [
+  ['capital opener', TWENTY_CAPITAL, []],
+  ['inline-code opener', `\`code\` ${TWENTY_TAIL}`, []],
+  ['emphasis opener', `*Emphasized* ${TWENTY_TAIL}`, []],
+  ['underscore opener', `_Emphasized_ ${TWENTY_TAIL}`, []],
+]) {
+  test(`RULE-12 splits a sentence whatever markup opens it: ${label}`, () => {
+    assert.deepEqual(auditTextAt(`${TWENTY_A} ${second}`, 'RULE-12'), expected);
+  });
+}
+
+// Markup after the final punctuation must not hide the boundary either. A
+// sentence ending `.**` puts the closing delimiter between the period and the
+// whitespace, so a lookbehind anchored on the punctuation never saw it, and
+// every bolded CHANGELOG entry read as one sentence through the next one. Each
+// case puts the punctuation INSIDE the delimiter, which is the broken shape; a
+// period after a closing delimiter always split, so that proves nothing.
+const TWENTY_LEAD = TWENTY_A.split(' ').slice(0, -1).join(' ').replace(/\.$/, '');
+for (const closer of ['**', '__', '*', '_', '`']) {
+  test(`RULE-12 splits when markup closes the first sentence: ${closer}`, () => {
+    const text = `${closer}Strong ${TWENTY_LEAD}.${closer} Then ${TWENTY_CAPITAL}`;
+    assert.deepEqual(auditTextAt(text, 'RULE-12'), []);
+  });
+}
+
+// The looser split must not stop the rule from firing on a real violation.
+test('RULE-12 still flags a genuinely long sentence', () => {
+  const text = `${Array(35).fill('word').join(' ')}.`;
+  assert.deepEqual(
+    auditText(text, 'RULE-12').map((v) => v.detail),
+    ['sentence length 35 words (>30)'],
+  );
+});
+
+// An abbreviation before a formatted value is not a sentence boundary. Every
+// markup opener lives in the guarded branch; putting them in the unguarded one
+// looks equivalent and silently suppresses real violations after `e.g.` and
+// friends. The matrix is what proves it: a guard applied to only one delimiter
+// looks correct until another is tried. `etc.` is deliberately unguarded and so
+// is absent, because at a sentence end it is a real boundary.
+for (const [abbreviation, lead] of [
+  ['e.g.', 'The command supports several output formats, e.g.'],
+  ['vs.', 'The evaluation compares our primary system vs.'],
+  ['Fig.', 'The evaluation trend appears in Fig.'],
+  ['cf.', 'The report compares the alternate protocol, cf.'],
+]) {
+  for (const value of ['`json`', '*json*', '_json_', '**json**']) {
+    test(`RULE-12 does not split ${abbreviation} before ${value}`, () => {
+      const text =
+        `${lead} ${value}, when automated consumers need stable fields for ` +
+        'parsing, validation, archival, comparison, monitoring, and downstream ' +
+        'reporting across multiple independent services during every nightly ' +
+        'scheduled production run.';
+      const words = (text.match(/\b[\w'-]+\b/g) || []).length;
+      assert.ok(words > 30, 'fixture must exceed the threshold to be meaningful');
+      assert.deepEqual(
+        auditText(text, 'RULE-12').map((v) => v.detail),
+        [`sentence length ${words} words (>30)`],
+      );
+    });
+  }
+}

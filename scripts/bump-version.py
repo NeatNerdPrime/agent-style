@@ -4,7 +4,7 @@
 Usage:
     python scripts/bump-version.py 0.1.0 0.1.1
 
-- Skips CHANGELOG.md and RELEASING.md (historical release references stay pinned).
+- Skips the files and directories that narrate past releases (see SKIP below).
 - Refuses to run when any of the five version-carrying files has drifted off OLD.
 - Walks tracked files ending in .md / .py / .js / .mdc / .json / .toml.
 - Applies a small set of exact-match replacements: `vX.Y.Z`, `"X.Y.Z"`,
@@ -21,13 +21,40 @@ if len(sys.argv) != 3:
 OLD, NEW = sys.argv[1], sys.argv[2]
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXTS = (".md", ".py", ".js", ".mdc", ".json", ".toml")
-# Both files narrate past releases by version number, so a blanket rewrite
+# These files narrate past releases by version number, so a blanket rewrite
 # would falsify the record. RELEASING.md recounts which release fix-forwarded a
 # packaging bug and which registry artifact still carries it; those sentences
-# have to keep naming the release it happened in. Neither file holds a version
-# string that a bump is supposed to advance. (Do not put a literal version in
-# this comment: the script rewrites its own source too.)
-SKIP = {"CHANGELOG.md", "RELEASING.md"}
+# have to keep naming the release it happened in. TODO.md joined them after a
+# bump silently rewrote "wait for the next bench" and "a new task for the next
+# cycle" into the version being released, which changed what those entries
+# asked for.
+#
+# Skipping is not the same as holding nothing live. CHANGELOG.md is mixed: its
+# past entries must stay pinned, while its top-of-file "Version distribution"
+# banner names the release being cut and is what RELEASING.md consults to decide
+# what may be published. That banner is prose, so no exact-match pattern here
+# can maintain it, and the drift check below cannot see it either. MANUAL_CHECKS
+# is printed on every run so the ones this script deliberately will not touch
+# are named rather than merely omitted.
+# (Do not put a literal version in this comment: the script rewrites its own
+# source too.)
+SKIP = {"CHANGELOG.md", "RELEASING.md", "TODO.md"}
+
+MANUAL_CHECKS = [
+    'CHANGELOG.md: the "Version distribution" banner names this release and the'
+    " previous shared registry release",
+    "CHANGELOG.md: move [Unreleased] to ## [NEW] with the release date",
+    "CHANGELOG.md: compare-link block at the bottom resolves [NEW] and points"
+    " [Unreleased] at the new tag",
+]
+
+# Directories whose contents are dated records rather than live documentation.
+# `docs/followups/` files are named for the day they were written and argue about
+# a release that was upcoming at the time. A bump rewrote one into claiming that
+# the release being prepared, rather than the one before it, had been the first
+# to fire the publish workflow, and collapsed a two-sided "hand-publish this one,
+# make the next one the OIDC cut" choice into naming the same release twice.
+SKIP_PREFIXES = ("docs/followups/",)
 
 PATTERNS = [
     (f"v{OLD}", f"v{NEW}"),
@@ -67,7 +94,7 @@ if drift:
 files = subprocess.check_output(["git", "-C", ROOT, "ls-files"], text=True).splitlines()
 changed = 0
 for rel in files:
-    if not rel.endswith(EXTS) or rel in SKIP:
+    if not rel.endswith(EXTS) or rel in SKIP or rel.startswith(SKIP_PREFIXES):
         continue
     path = os.path.join(ROOT, rel)
     try:
@@ -84,3 +111,6 @@ for rel in files:
         changed += 1
         print(f"  updated: {rel}")
 print(f"total: {changed} files")
+print(f"\nstill to do by hand ({len(MANUAL_CHECKS)}), none of which this script can rewrite:")
+for check in MANUAL_CHECKS:
+    print(f"  [ ] {check.replace('[NEW]', f'[{NEW}]')}")
