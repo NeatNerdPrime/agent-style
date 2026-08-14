@@ -1,6 +1,6 @@
 # agent-style bench v0.3.0: corrected-engine re-score
 
-This report re-scores the 160 committed drafts in `docs/bench-0.3.0-drafts/` at tree `a405f980e87becefbbc118495a775d2642ec5d31`, verified clean against the index before scoring. It makes no model calls and generates no new prose. Original values come from the four published runner scorecards, whose SHA-256 as a set is `1361bbb188e1d655a6dd95fbdf3c6e633b89ca505bbd85e5ff712e5a3bc94f18`. Corrected values use agent-style v0.4.1; scoring-source manifest SHA-256 `dde121a3cef16666aa804fadef9fc861ec351e10710707941f27a28cd06380c6`.
+This report re-scores the 160 committed drafts in `docs/bench-0.3.0-drafts/` at tree `a405f980e87becefbbc118495a775d2642ec5d31`, verified clean against the index before scoring. It makes no model calls and generates no new prose. Original values come from the four published runner scorecards, whose SHA-256 as a set is `1361bbb188e1d655a6dd95fbdf3c6e633b89ca505bbd85e5ff712e5a3bc94f18`. Corrected values use agent-style v0.4.2; scoring-source manifest SHA-256 `1c6ce492013865903be2369bf9c2d8d9483045a1bc449a2f6ae4908653fd6e5a`.
 
 The replay uses the original harness and its exact scoring invocation: `agent-style review --mechanical-only --audit-only`. Delta is treatment minus baseline. A negative delta means fewer flagged violations in the treatment drafts. Change in delta is corrected minus original.
 

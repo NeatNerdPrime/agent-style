@@ -135,6 +135,7 @@ _LETTER_TOKEN_START = re.compile(r"^[^\W\d_]+")
 
 # Any em-dash or en-dash we want to flag (we subtract allowed en-dashes).
 _ANY_DASH = re.compile(r"[\u2014\u2013]")
+_EM_DASH = "\u2014"
 
 
 def _is_paired_name_en_dash(line: str, col: int) -> bool:
@@ -166,13 +167,20 @@ def _rule_b(text: str) -> list[Violation]:
                 continue
             if _inside_inline_code(line, m.start()):
                 continue
+            # The dash kind is resolved before the f-string, not inside it.
+            # A backslash escape in an f-string expression is a SyntaxError
+            # before Python 3.12, where PEP 701 lifted the restriction. v0.4.1
+            # wrote it inline while declaring Requires-Python >=3.8, so this
+            # module raised at import on 3.8 through 3.11 and took every
+            # review path down with it. The floor is >=3.9 now and CI runs it.
+            kind = "em" if m.group() == _EM_DASH else "en"
             out.append(
                 Violation(
                     rule="RULE-B",
                     line=line_no,
                     column=m.start() + 1,
                     excerpt=_excerpt(line, (m.start(), m.end())),
-                    detail=f"{'em' if m.group() == '\u2014' else 'en'}-dash as casual punctuation",
+                    detail=f"{kind}-dash as casual punctuation",
                 )
             )
     return out

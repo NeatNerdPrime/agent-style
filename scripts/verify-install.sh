@@ -5,9 +5,10 @@
 #
 # Modes:
 #   --version-only [EXPECTED_VERSION=X.Y.Z]
-#       Read the three version files (pyproject.toml, __init__.py, package.json);
-#       assert they are equal. If EXPECTED_VERSION is set, also assert each
-#       file matches that exact string. Used pre-tag.
+#       Read the five version carriers (pyproject.toml, __init__.py,
+#       package.json, and the two bundled data/tools.json mirrors); assert they
+#       are equal. If EXPECTED_VERSION is set, also assert each file matches
+#       that exact string. Used pre-tag. The list matches bump-version.py's.
 #
 #   --cli-parity
 #       Build both packages locally; install into scratch venv/dir OUTSIDE the
@@ -61,16 +62,34 @@ read_npm_version() {
     | head -n 1 | sed -E 's/.*"version"\s*:\s*"([^"]+)".*/\1/'
 }
 
+# The two bundled tools.json mirrors. Prints nothing when the key is absent,
+# which then fails the equality check below rather than passing as an empty
+# match on both sides.
+read_tools_json_version() {
+  grep -E '"agent_style_version"\s*:' "$1" \
+    | head -n 1 | sed -E 's/.*"agent_style_version"\s*:\s*"([^"]+)".*/\1/'
+}
+
 mode_version_only() {
-  local v_toml v_init v_npm
+  # All five carriers, not three. bump-version.py names five and refuses to run
+  # when any has drifted, precisely because the two tools.json mirrors were
+  # missed for two releases. This gate checked the three the script already had
+  # readers for, so the release check could pass while the pair it was written
+  # to protect had drifted.
+  local v_toml v_init v_npm v_pytools v_npmtools
   v_toml="$(read_pyproject_version)"
   v_init="$(read_python_init_version)"
   v_npm="$(read_npm_version)"
-  echo "pyproject.toml          : $v_toml"
-  echo "agent_style/__init__.py : $v_init"
-  echo "package.json            : $v_npm"
-  if [[ "$v_toml" != "$v_init" || "$v_toml" != "$v_npm" ]]; then
-    echo "FAIL: version mismatch across the three files" >&2
+  v_pytools="$(read_tools_json_version "$PYPI_DIR/agent_style/data/tools.json")"
+  v_npmtools="$(read_tools_json_version "$NPM_DIR/data/tools.json")"
+  echo "pyproject.toml            : $v_toml"
+  echo "agent_style/__init__.py   : $v_init"
+  echo "package.json              : $v_npm"
+  echo "pypi data/tools.json      : $v_pytools"
+  echo "npm  data/tools.json      : $v_npmtools"
+  if [[ "$v_toml" != "$v_init" || "$v_toml" != "$v_npm" \
+        || "$v_toml" != "$v_pytools" || "$v_toml" != "$v_npmtools" ]]; then
+    echo "FAIL: version mismatch across the five version carriers" >&2
     exit 1
   fi
   if [[ -n "$EXPECTED_VERSION" ]]; then

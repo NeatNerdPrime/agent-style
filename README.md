@@ -93,7 +93,7 @@ See [`RULES.md`](RULES.md) for the full per-rule blocks with BAD/GOOD examples, 
 
 ## Does It Work?
 
-![agent-style v0.3.0 sanity bench with corrected v0.4.1 scoring across Claude Opus 4.7, OpenAI GPT-5.4 via Codex CLI, and Gemini 3 Flash: 88 to 47 (-47%), 48 to 26 (-46%), and 65 to 9 (-86%) AI-tell violations across 10 fixed prose tasks, per-rule breakdown, directional-not-statsig caveat](docs/bench.png)
+![agent-style v0.3.0 sanity bench with corrected v0.4.2 scoring across Claude Opus 4.7, OpenAI GPT-5.4 via Codex CLI, and Gemini 3 Flash: 88 to 47 (-47%), 48 to 26 (-46%), and 65 to 9 (-86%) AI-tell violations across 10 fixed prose tasks, per-rule breakdown, directional-not-statsig caveat](docs/bench.png)
 
 Sanity bench on 10 fixed prose tasks, 2 generations per condition. The task set is 2 PR descriptions, 1 design-doc section, 1 commit message, 4 paper sections, 1 product description, and 1 NSF-style specific aim. Flagship models drafted each one twice: once with `agent-style` loaded at generation time, once without.
 
@@ -109,7 +109,7 @@ Both **critical**-severity rules are measured by nothing here. RULE-01 (curse of
 
 Numbers are directional and carry no claim of statistical significance. Each runner saw 10 tasks × 2 generations × 2 conditions, or 40 calls. Where the instruction file reaches the model's context, mechanical AI-tell density falls. How far it falls tracks each model's baseline, and is larger in models that emit long sentences and em-dashes by default.
 
-The figure above is scored with the v0.4.1 engine and comes from [`docs/bench-0.3.0-rescored.md`](docs/bench-0.3.0-rescored.md). It re-scores the same 160 preserved drafts with the repaired detectors, reporting the original and corrected value side by side. Repairing divergences between a rule's directive and its detector moved the pooled delta from -133 to -119, most recently by teaching RULE-12 to see a sentence boundary through Markdown markup. That correction is small next to the scope limits above.
+The figure above is scored with the v0.4.2 engine and comes from [`docs/bench-0.3.0-rescored.md`](docs/bench-0.3.0-rescored.md). It re-scores the same 160 preserved drafts with the repaired detectors, reporting the original and corrected value side by side. Repairing divergences between a rule's directive and its detector moved the pooled delta from -133 to -119, most recently by teaching RULE-12 to see a sentence boundary through Markdown markup. That correction is small next to the scope limits above.
 
 Original scorecards remain at [`docs/bench-0.3.0.md`](docs/bench-0.3.0.md) and the preserved drafts at [`docs/bench-0.3.0-drafts/`](docs/bench-0.3.0-drafts/). Reproduction steps live in [`RELEASING.md`](RELEASING.md) under "Bench (Local Only)". The figure now shows the corrected scoring, regenerated for this release. No new model generation was run: the same preserved drafts were re-scored.
 
@@ -130,7 +130,7 @@ Install the CLI once; then pick the paths you want.
 ```bash
 pip install agent-style                              # Python users
 # or: npm install -g agent-style                     # Node users
-# or: npx --yes agent-style@0.4.1 <subcommand>       # no install needed
+# or: npx --yes agent-style@0.4.2 <subcommand>       # no install needed
 ```
 
 ### 1. Soft Enforcement — rules at generation time
@@ -219,7 +219,7 @@ For `print-only` and `multi-file-required`, the JSON output carries `manual_step
 </details>
 
 <details>
-<summary><b>Per-surface install table (v0.4.1 primary set)</b></summary>
+<summary><b>Per-surface install table (v0.4.2 primary set)</b></summary>
 <br>
 
 | Tool | install_mode | Target path |
@@ -246,7 +246,7 @@ The 11 planned v1.1 surfaces are Amazon Q Developer, JetBrains AI Assistant, Win
 Skip the package install; pin to a specific release so adapters and `RULES.md` stay consistent:
 
 ```bash
-AGENT_STYLE_REF=v0.4.1
+AGENT_STYLE_REF=v0.4.2
 mkdir -p .agent-style
 curl -fsSLo .agent-style/RULES.md       "https://raw.githubusercontent.com/yzhao062/agent-style/${AGENT_STYLE_REF}/RULES.md"
 curl -fsSLo .agent-style/claude-code.md "https://raw.githubusercontent.com/yzhao062/agent-style/${AGENT_STYLE_REF}/agents/claude-code.md"
@@ -339,7 +339,7 @@ After running `agent-style enable <tool>`, ask your agent:
 
 Expected reply:
 
-> agent-style v0.4.1 active: 21 rules (RULE-01..12 canonical + RULE-A..I field-observed); full bodies at .agent-style/RULES.md.
+> agent-style v0.4.2 active: 21 rules (RULE-01..12 canonical + RULE-A..I field-observed); full bodies at .agent-style/RULES.md.
 
 For `style-review` specifically, ask:
 
@@ -372,7 +372,7 @@ npx anywhere-agents        # Node.js path
 
 Opt out by adding `rule_packs: []` to `agent-config.yaml` at your project root; pin to a specific ref or swap for a fork via `rule_packs: - name: agent-style\n    ref: <tag>`. See [anywhere-agents rule-pack composition docs](https://github.com/yzhao062/anywhere-agents/blob/main/docs/rule-pack-composition.md) for the full contract.
 
-### v0.4.1+ Roadmap
+### v0.4.2+ Roadmap
 
 Planned CLI additions: `agent-style update` (refresh installed adapters to latest), `agent-style override <RULE-ID> disable` (per-rule opt-out), `agent-style clean` (one-command uninstall), `.agent-style/config.toml` (project-level config), RULE-02 / 07 / 09 / 10 structural detectors filled in, and filled adapters for the planned-adapter set above (v1.1). Track progress in [`CHANGELOG.md`](CHANGELOG.md).
 

@@ -6,11 +6,27 @@ All notable changes to *The Elements of Agent Style* are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semantic Versioning: [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html).
 
-> **Version distribution for the v0.4.1 release.** The last shared PyPI and npm release before this one is **0.4.0**; this release publishes **0.4.1** to both registries. Git tags **v0.3.2** and **v0.3.3** remain *docs-only* additions (`docs/rule-pack.md` published as the `anywhere-agents` rule-pack pin target, and README Use option 3 cross-reference); they were never a PyPI or npm publish target, and the package version files skipped them. No package release may reuse a docs-only ref. See `RELEASING.md` for the docs-only tag convention. This banner is the authoritative record `RELEASING.md` consults when deciding what may be published, so it is updated on every release.
+> **Version distribution for the v0.4.2 release.** The last shared PyPI and npm release before this one is **0.4.1**; this release publishes **0.4.2** to both registries. Git tags **v0.3.2** and **v0.3.3** remain *docs-only* additions (`docs/rule-pack.md` published as the `anywhere-agents` rule-pack pin target, and README Use option 3 cross-reference); they were never a PyPI or npm publish target, and the package version files skipped them. No package release may reuse a docs-only ref. See `RELEASING.md` for the docs-only tag convention. This banner is the authoritative record `RELEASING.md` consults when deciding what may be published, so it is updated on every release.
 
 ## [Unreleased]
 
 *No unreleased changes queued.*
+
+## [0.4.2] — 2026-08-14
+
+Patch. The ruleset, the adapters and the CLI interface are unchanged. This release restores deterministic review on Python 3.9 through 3.11 and aligns the declared Python floor with the versions CI exercises.
+
+### Fixed
+
+- **Deterministic review failed below Python 3.12.** `detectors_mech.py` built RULE-B's message with a backslash escape inside an f-string expression, which Python first accepts in 3.12 under PEP 701. On 3.8 through 3.11, importing that detector raised `SyntaxError`. The detector loads lazily, when `audit()` or `compare()` runs, so `agent-style review`, `style-review`, and a direct import of `agent_style.review.detectors_mech` failed. Top-level `import agent_style`, `import agent_style.review`, and CLI commands that do not reach review, such as `list-tools`, kept working. That partial surface is what made the failure quiet: `pip install agent-style` succeeded, the package imported, and the break arrived only on the first review. The em-dash literal now lives in a module constant, leaving the reported `em` and `en` text unchanged.
+
+- **Nothing in this repository ran the Python code on the versions the package advertised.** Every job in every workflow pinned `python-version: '3.12'` while `requires-python` said `>=3.8`, so the claim was asserted and never checked. That is why a defect this plain survived a release: the suite is thorough and only ever ran on the one version whose parser accepts the syntax. A `python-floor` job now runs on 3.9, 3.10 and 3.11. It imports every shipped module as a separate step before the suite. A `SyntaxError` at import is the failure it exists to catch, and that diagnosis should not arrive buried in a collection error.
+
+  The bug was found downstream rather than here, by `anywhere-agents`, whose own matrix covers 3.9 through 3.13 and which had just started installing this package in CI. A consumer's matrix caught what the producer's did not.
+
+### Changed
+
+- **`requires-python` is now `>=3.9`, and the 3.8 classifier is dropped.** The floor names the oldest version CI runs. Declaring 3.8 while testing only 3.12 is the same defect as the one above, one layer up, and 3.8 reached end of life in October 2024. This does end the partial 3.8 support that 0.4.1 still had: top-level imports and the CLI paths that never reach review ran there, while deterministic review did not. Under `RELEASING.md`'s policy this is a patch. The ruleset, adapter and CLI interface contracts are untouched, and the change corrects an incomplete packaging claim.
 
 ## [0.4.1] — 2026-08-13
 
@@ -255,7 +271,8 @@ The v0.3.0 cycle turns the bench from a narrow, API-billable CI job into a full-
 
 ---
 
-[Unreleased]: https://github.com/yzhao062/agent-style/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/yzhao062/agent-style/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/yzhao062/agent-style/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/yzhao062/agent-style/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/yzhao062/agent-style/compare/v0.3.6...v0.4.0
 [0.3.6]: https://github.com/yzhao062/agent-style/compare/v0.3.5...v0.3.6

@@ -63,6 +63,57 @@ jobs:
             packages/npm/data/RULES.md \
             packages/npm/data/rule-pack-compact.md
 
+  # Every job in this repository pinned python-version 3.12 while the package
+  # declared requires-python >=3.8, so nothing ever ran the Python code on the
+  # versions it claimed to support. v0.4.1 shipped a backslash inside an
+  # f-string expression, which PEP 701 legalized only in 3.12, and the module
+  # could not be imported at all on 3.9 through 3.11. It was found downstream,
+  # by a consumer whose own matrix is broader. The floor version is tested here
+  # so the claim in pyproject.toml is checked rather than asserted.
+  python-floor:
+    name: Import + tests on the oldest supported Python (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Python test dependency
+        run: python -m pip install "pytest>=8,<9"
+
+      # Import first and on its own. A SyntaxError at import is the failure
+      # this job exists for, and naming it separately keeps that diagnosis one
+      # line long instead of buried in a collection error.
+      - name: Import every shipped module
+        run: |
+          python -c "
+          import pathlib, importlib
+          root = pathlib.Path('packages/pypi')
+          mods = sorted(
+              '.'.join(p.relative_to(root).with_suffix('').parts)
+              for p in (root / 'agent_style').rglob('*.py')
+              if p.name != '__main__.py'
+          )
+          import sys; sys.path.insert(0, str(root))
+          for m in mods:
+              importlib.import_module(m.removesuffix('.__init__'))
+              print('ok', m)
+          "
+
+      - name: Run unit tests
+        shell: bash
+        env:
+          PYTHON: python
+        run: bash scripts/run-tests.sh
+
   unit-tests:
     name: Unit tests (${{ matrix.os }}, Node ${{ matrix.node-version }})
     runs-on: ${{ matrix.os }}

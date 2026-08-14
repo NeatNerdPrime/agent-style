@@ -570,7 +570,7 @@ def main() -> int:
         output = args.output if args.output.is_absolute() else ROOT / args.output
         output.parent.mkdir(parents=True, exist_ok=True)
         # Not Path.write_text(..., newline=...): that keyword arrived in 3.10
-        # and the package declares requires-python >= 3.8, so it would raise
+        # and the package declares requires-python >= 3.9, so it would raise
         # TypeError only after the whole replay had already run.
         with output.open("w", encoding="utf-8", newline="\n") as report_file:
             report_file.write(report)

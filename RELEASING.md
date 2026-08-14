@@ -10,7 +10,7 @@ TestPyPI rehearsal happens **before** tag with ecosystem-specific rc versions (P
 
 | Item | Needed for | Setup |
 | --- | --- | --- |
-| Python 3.8+ with `build` and `twine` | PyPI publish | `pip install --upgrade build twine` |
+| Python 3.9+ with `build` and `twine` | PyPI publish | `pip install --upgrade build twine` |
 | Node.js 14+ with `npm` | npm publish | Install Node; `npm -v` works |
 | `git` | everything | — |
 | `gh` CLI | GitHub release | `winget install GitHub.cli` or `brew install gh`; `gh auth login` |
