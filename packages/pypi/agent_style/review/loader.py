@@ -4,7 +4,7 @@
 Resolution order (first match wins; last step is a hard failure):
 
 1. Project-local: `.agent-style/RULES.md` in the caller's cwd (or any parent).
-2. Package bundle: `importlib.resources.files("agent_style.data") / "RULES.md"`.
+2. Package bundle: `importlib.resources.files("agent_style") / "data" / "RULES.md"`.
 3. `agent-style rules` subcommand output: captures stdout if the CLI is on PATH.
 4. Pinned raw URL fallback at the current package version (10s timeout).
 5. Hard fail with an actionable error message.
@@ -83,7 +83,12 @@ def load_rules(
     # Step 2: package bundle
     try:
         from importlib import resources
-        bundle_file = resources.files("agent_style.data") / "RULES.md"
+        # agent_style.data is an implicit namespace package, because data has
+        # no __init__.py. Python 3.9's resources.files() follows its None spec
+        # origin into pathlib.Path and raises TypeError; 3.10 adds a namespace
+        # resource reader and handles it. Anchor on the regular agent_style
+        # package and traverse to data so every supported loader resolves it.
+        bundle_file = resources.files("agent_style") / "data" / "RULES.md"
         text = bundle_file.read_text(encoding="utf-8")
         # Try to surface a filesystem path for debuggability (works for most layouts)
         try:
