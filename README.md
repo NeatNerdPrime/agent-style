@@ -64,7 +64,7 @@ Sourced from writing authorities; each rule cites its source by chapter, section
 | 04 | Do not include needless words | S&W §II.17; Orwell 1946 Rule 3 |
 | 05 | Do not use dying metaphors or prefabricated phrases | Orwell 1946 Rule 1 |
 | 06 | Do not use avoidable jargon where an everyday English word exists | Orwell 1946 Rule 5; Pinker 2014 Ch. 2 |
-| 07 | Use affirmative form for affirmative claims | S&W §II.15 |
+| 07 | Use affirmative form for affirmative claims; no "X, not Y" antithesis | S&W §II.15 |
 | 08 | Do not linguistically overstate or understate claims relative to the evidence | Pinker 2014 Ch. 6; Gopen & Swan 1990 |
 | 09 | Express coordinate ideas in similar form (parallel structure) | S&W §II.19 |
 | 10 | Keep related words together | S&W §II.20; Gopen & Swan 1990 |
