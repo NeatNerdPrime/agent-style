@@ -33,6 +33,11 @@ jobs:
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ github.event.inputs.model }}
+      # gemini-cli 0.58.0 gates every run on a trusted-folder check. The smoke
+      # runs in a mktemp scratch dir, which is never trusted, so all three
+      # calls exited before reaching the API and left empty drafts behind.
+      # This is the documented headless escape; --skip-trust per call also works.
+      GEMINI_CLI_TRUST_WORKSPACE: "true"
     steps:
       - uses: actions/checkout@v5
 
