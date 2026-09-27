@@ -22,3 +22,8 @@ packages/npm/node_modules/
 v*-release-notes.md
 .agent-config/
 agent-config.local.yaml
+/AGENTS.md
+/CLAUDE.md
+todo/*
+!todo/README.md
+/.claude/
